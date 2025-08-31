@@ -102,6 +102,14 @@ function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
 
+  const playVideo = React.useCallback((path: string) => {
+    if (selectedVideo !== path) {
+      // Trigger animation for new video
+      setVideoKey(prev => prev + 1);
+    }
+    setSelectedVideo(path);
+  }, [selectedVideo]);
+
   // Handle file opening from Windows file associations
   React.useEffect(() => {
     const handleFileOpen = (event: any, filePath: string) => {
@@ -127,7 +135,7 @@ function App() {
     return () => {
       ipcRenderer.removeListener('open-file', handleFileOpen);
     };
-  }, []);
+  }, [playVideo]);
 
   const selectDirectory = async () => {
     try {
@@ -150,13 +158,7 @@ function App() {
     }
   };
 
-  const playVideo = (path: string) => {
-    if (selectedVideo !== path) {
-      // Trigger animation for new video
-      setVideoKey(prev => prev + 1);
-    }
-    setSelectedVideo(path);
-  };
+  // moved above and memoized with useCallback
 
   const deleteVideo = async (path: string) => {
     const confirmed = window.confirm('Are you sure you want to delete this video?');
@@ -190,6 +192,54 @@ function App() {
       }
     } catch (error) {
       console.error('Error opening file:', error);
+    }
+  };
+
+  const openDisc = async () => {
+  setIsLoading(true);
+    try {
+      const drive: string | null = await ipcRenderer.invoke('choose-disc-drive');
+      if (!drive) {
+        return;
+      }
+  // Scanning disc
+      const result: any = await ipcRenderer.invoke('scan-disc', drive);
+      if (!result || result.kind === 'none') {
+        alert('No playable media found on this disc.');
+        return;
+      }
+      if (result.kind === 'data') {
+        const list: Video[] = (result.videos || []).map((v: any) => ({ path: v.path, thumbnail: v.thumbnail || '' }));
+        if (list.length === 0) {
+          alert('No supported video files found on this disc.');
+          return;
+        }
+        setVideos(list);
+        playVideo(list[0].path);
+        return;
+      }
+      if (result.kind === 'dvd') {
+        const vobs: string[] = result.vobs || [];
+        if (!vobs.length) {
+          alert('DVD structure detected but no title files found.');
+          return;
+        }
+  // Converting DVD to MP4 may take a while
+        const outPath: string | null = await ipcRenderer.invoke('convert-dvd-title', vobs);
+        if (!outPath) {
+          alert('Failed to convert DVD to a playable file.');
+          return;
+        }
+        const vid: Video = { path: outPath, thumbnail: '' };
+        setVideos(prev => [...prev, vid]);
+        playVideo(outPath);
+        return;
+      }
+    } catch (e) {
+      console.error('Open disc error', e);
+      alert('Error opening disc.');
+    } finally {
+  setIsLoading(false);
     }
   };
 
@@ -361,7 +411,7 @@ function App() {
                         aria-valuemin={0} 
                         aria-valuemax={100}
                       >
-                        <div className="progress-fill" style={{width: `${video.watchedProgress}%`}}></div>
+                        <div className="progress-fill" style={{ width: `${video.watchedProgress}%` }}></div>
                       </div>
                     </div>
                   );
@@ -421,6 +471,7 @@ function App() {
                       <option value="size">Sort by Size</option>
                     </select>
                   </div>
+                  <button className="browse-btn secondary" onClick={openDisc} title="Open a DVD or CD">Open Disc</button>
                 </div>
               </div>
             </div>
@@ -439,6 +490,7 @@ function App() {
                   <div className="empty-state-actions">
                     <button className="browse-btn" onClick={selectDirectory}>Browse Folder</button>
                     <button className="browse-btn secondary" onClick={openSingleFile}>Open File</button>
+                    <button className="browse-btn secondary" onClick={openDisc}>Open Disc</button>
                   </div>
                 </div>
               )}
@@ -519,7 +571,7 @@ function App() {
                         aria-valuemin={0} 
                         aria-valuemax={100}
                       >
-                        <div className="progress-fill" style={{width: `${video.watchedProgress}%`}}></div>
+                        <div className="progress-fill" style={{ width: `${video.watchedProgress}%` }}></div>
                       </div>
                     )}
                   </div>

@@ -3,3 +3,4 @@
 /dist-electron
 /src/renderer/build
 /release
+/release-build

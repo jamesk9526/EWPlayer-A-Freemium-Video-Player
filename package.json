@@ -1,7 +1,7 @@
 {
   "name": "ewplayer",
   "productName": "EwPlayer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native Windows video player with library management",
   "main": "dist/main.js",
   "homepage": ".",
@@ -21,7 +21,7 @@
     "productName": "EwPlayer",
   "copyright": "Copyright (c) 2025 EwPlayer Team",
     "directories": {
-      "output": "release"
+      "output": "release-build"
     },
     "files": [
       "dist/**/*",
