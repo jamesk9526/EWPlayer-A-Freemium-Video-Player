@@ -1,3 +1,5 @@
 /src/renderer/node_modules
 /node_modules
 /dist-electron
+/src/renderer/build
+/release

@@ -117,7 +117,13 @@ function createWindow() {
         mainWindow.loadURL('http://localhost:3000');
     }
     else {
-        mainWindow.loadFile(path.join(__dirname, '../renderer/build/index.html'));
+        // In production, CRA outputs to src/renderer/build. Our compiled main.js lives in dist/.
+        // __dirname points to app.asar/dist, so go up one and into src/renderer/build.
+        const prodIndex = path.join(__dirname, '../src/renderer/build/index.html');
+        if (!fs.existsSync(prodIndex)) {
+            console.error('Production index.html not found at', prodIndex);
+        }
+        mainWindow.loadFile(prodIndex);
     }
     // Show window when ready to prevent visual flash
     mainWindow.once('ready-to-show', () => {
@@ -192,7 +198,7 @@ electron_1.ipcMain.handle('get-file-info', async (event, filePath) => {
         return null;
     }
 });
-electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPosition = 50) => {
+electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
     const videos = [];
     function scanDir(dir) {
         try {
@@ -212,13 +218,7 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPositio
                         }
                         catch (_a) { }
                         const thumbnailPath = path.join(thumbsDir, path.basename(file, ext) + '.jpg');
-                        videos.push({
-                            path: filePath,
-                            thumbnail: thumbnailPath,
-                            stats: {
-                                size: stat.size
-                            }
-                        });
+                        videos.push({ path: filePath, thumbnail: thumbnailPath });
                     }
                 }
             }
@@ -229,13 +229,11 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPositio
     }
     scanDir(dirPath);
     console.log('Found videos:', videos.length);
-    // Generate thumbnails and get metadata
+    // Generate thumbnails synchronously for better UX
     for (const video of videos) {
         try {
-            // Get video metadata first
-            video.metadata = await getVideoMetadata(video.path);
             await new Promise((resolve, reject) => {
-                // First get video duration to calculate thumbnail position
+                // First get video duration to calculate 50% point
                 fluent_ffmpeg_1.default.ffprobe(video.path, (err, metadata) => {
                     var _a;
                     if (err) {
@@ -244,8 +242,8 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPositio
                         return;
                     }
                     const duration = ((_a = metadata.format) === null || _a === void 0 ? void 0 : _a.duration) || 0;
-                    const thumbnailTime = Math.floor(duration * (thumbnailPosition / 100));
-                    const timemarkSeconds = thumbnailTime > 0 ? thumbnailTime : 20;
+                    const midPoint = Math.floor(duration / 2); // 50% of video duration
+                    const timemarkSeconds = midPoint > 0 ? midPoint : 20; // Fallback to 1 second if duration can't be determined
                     (0, fluent_ffmpeg_1.default)(video.path)
                         .screenshots({
                         count: 1,
@@ -255,7 +253,7 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPositio
                         size: '320x180'
                     })
                         .on('end', () => {
-                        console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (${thumbnailPosition}% of ${duration}s)`);
+                        console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (50% of ${duration}s)`);
                         resolve(true);
                     })
                         .on('error', (err) => {
@@ -271,27 +269,6 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath, thumbnailPositio
     }
     return videos;
 });
-// Get video metadata using ffprobe
-async function getVideoMetadata(videoPath) {
-    return new Promise((resolve) => {
-        fluent_ffmpeg_1.default.ffprobe(videoPath, (err, metadata) => {
-            if (err) {
-                console.error('Error getting metadata:', err);
-                resolve({});
-                return;
-            }
-            const videoStream = metadata.streams.find(stream => stream.codec_type === 'video');
-            const duration = metadata.format.duration || 0;
-            const result = {
-                duration: duration,
-                resolution: videoStream ? `${videoStream.width}x${videoStream.height}` : undefined,
-                bitrate: metadata.format.bit_rate ? Math.round(Number(metadata.format.bit_rate) / 1000) : undefined,
-                codec: videoStream === null || videoStream === void 0 ? void 0 : videoStream.codec_name
-            };
-            resolve(result);
-        });
-    });
-}
 electron_1.ipcMain.handle('delete-video', async (event, videoPath) => {
     try {
         fs.unlinkSync(videoPath);
@@ -322,19 +299,4 @@ electron_1.ipcMain.handle('window-close', () => {
     if (mainWindow) {
         mainWindow.close();
     }
-});
-// Enhanced window features
-electron_1.ipcMain.handle('toggle-fullscreen', () => {
-    if (mainWindow) {
-        mainWindow.setFullScreen(!mainWindow.isFullScreen());
-        return mainWindow.isFullScreen();
-    }
-    return false;
-});
-electron_1.ipcMain.handle('set-always-on-top', (event, flag) => {
-    if (mainWindow) {
-        mainWindow.setAlwaysOnTop(flag);
-        return mainWindow.isAlwaysOnTop();
-    }
-    return false;
 });

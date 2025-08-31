@@ -85,7 +85,13 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/build/index.html'));
+    // In production, CRA outputs to src/renderer/build. Our compiled main.js lives in dist/.
+    // __dirname points to app.asar/dist, so go up one and into src/renderer/build.
+    const prodIndex = path.join(__dirname, '../src/renderer/build/index.html');
+    if (!fs.existsSync(prodIndex)) {
+      console.error('Production index.html not found at', prodIndex);
+    }
+    mainWindow.loadFile(prodIndex);
   }
 
   // Show window when ready to prevent visual flash
