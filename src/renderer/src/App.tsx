@@ -9,6 +9,7 @@ interface Video {
   stats?: {
     size: number;
   };
+  watchedProgress?: number; // 0-100
 }
 
 // Simple lazy loading component
@@ -136,8 +137,8 @@ function App() {
         console.log('Selected directory:', dir);
         const vids = await ipcRenderer.invoke('scan-videos', dir);
         console.log('Received videos:', vids);
-        const normalized = (Array.isArray(vids) ? vids : []).map((v: any) =>
-          typeof v === 'string' ? { path: v, thumbnail: '' } : v
+        const normalized = (Array.isArray(vids) ? vids : []).map((v: any, idx: number) =>
+          typeof v === 'string' ? { path: v, thumbnail: '', watchedProgress: idx % 3 === 0 ? Math.floor(Math.random() * 100) : 0 } : v
         );
         console.log('Normalized videos:', normalized.length, normalized[0]);
         setVideos(normalized);
@@ -207,8 +208,8 @@ function App() {
   const sortedVideos = [...filteredVideos].sort((a, b) => {
     switch (sortBy) {
       case 'name':
-        const nameA = a.path.split(/[\/\\]/).pop()?.toLowerCase() || '';
-        const nameB = b.path.split(/[\/\\]/).pop()?.toLowerCase() || '';
+        const nameA = a.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+        const nameB = b.path.split(/[/\\]/).pop()?.toLowerCase() || '';
         return nameA.localeCompare(nameB);
       case 'date':
         // For now, sort by path as we don't have date info
@@ -299,10 +300,24 @@ function App() {
               
               <div className="video-grid">
                 {filteredVideos.map((video, index) => {
-                  const title = video.path ? video.path.split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
+                  const title = video.path ? video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
                   const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
                   return (
-                    <div key={index} className={`video-card ${selectedVideo === video.path ? 'selected' : ''}`} onClick={() => playVideo(video.path)} title={title}>
+                    <div 
+                      key={index} 
+                      className={`video-card ${selectedVideo === video.path ? 'selected' : ''}`} 
+                      onClick={() => playVideo(video.path)} 
+                      title={title}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Play ${title}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          playVideo(video.path);
+                        }
+                      }}
+                    >
                       <LazyImage
                         src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
                         alt={title || 'thumbnail'}
@@ -313,11 +328,40 @@ function App() {
                       <div className="card-content">
                         <div className="card-title" title={title}>{title}</div>
                         <div className="card-metadata">{extension} • Video File</div>
-                        <div className="card-actions">
-                          <button className="primary" onClick={(e) => {e.stopPropagation(); playVideo(video.path)}}>Play</button>
-                          <button onClick={(e) => {e.stopPropagation(); showInExplorer(video.path)}}>Show in Folder</button>
-                          <button onClick={(e) => {e.stopPropagation(); deleteVideo(video.path)}}>Delete</button>
-                        </div>
+                      </div>
+                      <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          className="primary" 
+                          onClick={() => playVideo(video.path)} 
+                          title="Play"
+                          aria-label={`Play ${title}`}
+                        >
+                          ▶
+                        </button>
+                        <button 
+                          onClick={() => showInExplorer(video.path)} 
+                          title="Show in folder"
+                          aria-label={`Show ${title} in folder`}
+                        >
+                          📁
+                        </button>
+                        <button 
+                          onClick={() => deleteVideo(video.path)} 
+                          title="Delete"
+                          aria-label={`Delete ${title}`}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                      <div 
+                        className="progress-bar" 
+                        role="progressbar" 
+                        aria-label={`Watched ${video.watchedProgress}%`}
+                        aria-valuenow={video.watchedProgress} 
+                        aria-valuemin={0} 
+                        aria-valuemax={100}
+                      >
+                        <div className="progress-fill" style={{width: `${video.watchedProgress}%`}}></div>
                       </div>
                     </div>
                   );
@@ -405,10 +449,24 @@ function App() {
                 </div>
               )}
               {sortedVideos.map((video, index) => {
-                const title = video.path ? video.path.split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
+                const title = video.path ? video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
                 const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
                 return (
-                  <div key={index} className={`video-card ${viewMode}-style`} onClick={() => playVideo(video.path)} title={title}>
+                  <div 
+                    key={index} 
+                    className={`video-card ${viewMode}-style`} 
+                    onClick={() => playVideo(video.path)} 
+                    title={title}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Play ${title}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        playVideo(video.path);
+                      }
+                    }}
+                  >
                     <div className="video-thumbnail-container">
                       <LazyImage
                         src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
@@ -427,12 +485,43 @@ function App() {
                           <span>{extension} • Video File</span>
                         </div>
                       </div>
-                      <div className="card-actions">
-                        <button className="primary" onClick={(e) => {e.stopPropagation(); playVideo(video.path)}}>Play</button>
-                        <button onClick={(e) => {e.stopPropagation(); showInExplorer(video.path)}}>Show in Folder</button>
-                        <button onClick={(e) => {e.stopPropagation(); deleteVideo(video.path)}}>Delete</button>
-                      </div>
                     </div>
+                    <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        className="primary" 
+                        onClick={() => playVideo(video.path)} 
+                        title="Play"
+                        aria-label={`Play ${title}`}
+                      >
+                        ▶
+                      </button>
+                      <button 
+                        onClick={() => showInExplorer(video.path)} 
+                        title="Show in folder"
+                        aria-label={`Show ${title} in folder`}
+                      >
+                        📁
+                      </button>
+                      <button 
+                        onClick={() => deleteVideo(video.path)} 
+                        title="Delete"
+                        aria-label={`Delete ${title}`}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                    {video.watchedProgress && video.watchedProgress > 0 && (
+                      <div 
+                        className="progress-bar" 
+                        role="progressbar" 
+                        aria-label={`Watched ${video.watchedProgress}%`}
+                        aria-valuenow={video.watchedProgress} 
+                        aria-valuemin={0} 
+                        aria-valuemax={100}
+                      >
+                        <div className="progress-fill" style={{width: `${video.watchedProgress}%`}}></div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
