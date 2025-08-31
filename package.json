@@ -1,11 +1,13 @@
 {
-  "name": "video-library-app",
+  "name": "ewplayer",
+  "productName": "EwPlayer",
   "version": "1.0.0",
-  "description": "Offline video library app",
+  "description": "Native Windows video player with library management",
   "main": "dist/main.js",
+  "homepage": ".",
   "scripts": {
-  "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && npm run start:main\"",
-  "start:main": "npm run build:main && cross-env NODE_ENV=development electron .",
+    "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && npm run start:main\"",
+    "start:main": "npm run build:main && cross-env NODE_ENV=development electron .",
     "start:renderer": "cd src/renderer && npm start",
     "build": "npm run build:renderer && npm run build:main",
     "build:main": "tsc -p src/main",
@@ -13,8 +15,84 @@
     "dist": "npm run build && electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "build": {
+    "appId": "com.ewplayer.app",
+    "productName": "EwPlayer",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "fileAssociations": [
+        {
+          "ext": "mp4",
+          "name": "MP4 Video",
+          "description": "MP4 Video File",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "avi",
+          "name": "AVI Video",
+          "description": "AVI Video File",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "mkv",
+          "name": "MKV Video",
+          "description": "Matroska Video File",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "mov",
+          "name": "MOV Video",
+          "description": "QuickTime Video File",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "wmv",
+          "name": "WMV Video",
+          "description": "Windows Media Video",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "flv",
+          "name": "FLV Video",
+          "description": "Flash Video File",
+          "icon": "assets/video-icon.ico"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EwPlayer"
+    }
+  },
+  "keywords": [
+    "video",
+    "player",
+    "media",
+    "windows"
+  ],
+  "author": "EwPlayer Team",
   "license": "ISC",
   "devDependencies": {
     "@types/fluent-ffmpeg": "^2.1.27",
@@ -22,6 +100,7 @@
     "concurrently": "^7.0.0",
     "cross-env": "^7.0.0",
     "electron": "^25.0.0",
+    "electron-builder": "^24.13.3",
     "typescript": "^5.0.0",
     "wait-on": "^7.0.0"
   },

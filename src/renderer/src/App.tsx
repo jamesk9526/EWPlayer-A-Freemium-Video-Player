@@ -97,6 +97,36 @@ function App() {
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [videoKey, setVideoKey] = useState(0); // For triggering video element re-animation
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
+
+  // Handle file opening from Windows file associations
+  React.useEffect(() => {
+    const handleFileOpen = (event: any, filePath: string) => {
+      if (filePath && typeof filePath === 'string') {
+        // Create a video object and play it
+        const video: Video = {
+          path: filePath,
+          thumbnail: ''
+        };
+        setVideos(prev => {
+          const exists = prev.find(v => v.path === filePath);
+          if (!exists) {
+            return [...prev, video];
+          }
+          return prev;
+        });
+        playVideo(filePath);
+      }
+    };
+
+    ipcRenderer.on('open-file', handleFileOpen);
+
+    return () => {
+      ipcRenderer.removeListener('open-file', handleFileOpen);
+    };
+  }, []);
 
   const selectDirectory = async () => {
     try {
@@ -120,6 +150,10 @@ function App() {
   };
 
   const playVideo = (path: string) => {
+    if (selectedVideo !== path) {
+      // Trigger animation for new video
+      setVideoKey(prev => prev + 1);
+    }
     setSelectedVideo(path);
   };
 
@@ -136,9 +170,61 @@ function App() {
     }
   };
 
+  const openSingleFile = async () => {
+    try {
+      const filePath = await ipcRenderer.invoke('open-file-dialog');
+      if (filePath) {
+        const video: Video = {
+          path: filePath,
+          thumbnail: ''
+        };
+        setVideos(prev => {
+          const exists = prev.find(v => v.path === filePath);
+          if (!exists) {
+            return [...prev, video];
+          }
+          return prev;
+        });
+        playVideo(filePath);
+      }
+    } catch (error) {
+      console.error('Error opening file:', error);
+    }
+  };
+
+  const showInExplorer = async (filePath: string) => {
+    try {
+      await ipcRenderer.invoke('show-in-explorer', filePath);
+    } catch (error) {
+      console.error('Error showing in explorer:', error);
+    }
+  };
+
   const filteredVideos = videos.filter(video => 
     video.path && video.path.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const sortedVideos = [...filteredVideos].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+        const nameA = a.path.split(/[\/\\]/).pop()?.toLowerCase() || '';
+        const nameB = b.path.split(/[\/\\]/).pop()?.toLowerCase() || '';
+        return nameA.localeCompare(nameB);
+      case 'date':
+        // For now, sort by path as we don't have date info
+        return a.path.localeCompare(b.path);
+      case 'size':
+        // For now, sort by path as we don't have size info
+        return a.path.localeCompare(b.path);
+      default:
+        return 0;
+    }
+  });
+
+  const getVideoExtensions = () => {
+    const extensions = new Set(videos.map(v => v.path.split('.').pop()?.toUpperCase()).filter(Boolean));
+    return Array.from(extensions);
+  };
 
   return (
     <div className="App">
@@ -146,7 +232,7 @@ function App() {
         <div className="header-left">
           <div className="logo">
             <div className="logo-icon">▶</div>
-            <h1>VideoTube</h1>
+            <h1>EwPlayer</h1>
           </div>
         </div>
         <div className="search-container">
@@ -157,9 +243,6 @@ function App() {
             value={searchTerm}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
           />
-        </div>
-        <div className="header-actions">
-          <button className="browse-btn" onClick={selectDirectory}>Browse Files</button>
         </div>
         <div className="window-controls">
           <button className="window-btn minimize-btn" onClick={minimizeWindow}>−</button>
@@ -173,6 +256,7 @@ function App() {
             <div className="player-section">
               <div className="video-container">
                 <video 
+                  key={videoKey}
                   src={toFileUrl(selectedVideo)} 
                   controls 
                   className="video-player"
@@ -231,6 +315,7 @@ function App() {
                         <div className="card-metadata">{extension} • Video File</div>
                         <div className="card-actions">
                           <button className="primary" onClick={(e) => {e.stopPropagation(); playVideo(video.path)}}>Play</button>
+                          <button onClick={(e) => {e.stopPropagation(); showInExplorer(video.path)}}>Show in Folder</button>
                           <button onClick={(e) => {e.stopPropagation(); deleteVideo(video.path)}}>Delete</button>
                         </div>
                       </div>
@@ -241,41 +326,118 @@ function App() {
             </div>
           </>
         ) : (
-          <div className="full-width-grid">
-            {isLoading && <div className="loading">Loading videos...</div>}
-            {!isLoading && videos.length === 0 && (
-              <div className="empty-state">
-                <p>No videos found. Click "Browse Files" to select a directory and get started.</p>
-                <button className="browse-btn" onClick={selectDirectory}>Browse Files</button>
-              </div>
-            )}
-            {!isLoading && videos.length > 0 && filteredVideos.length === 0 && (
-              <div className="no-results">No videos match your search.</div>
-            )}
-            {filteredVideos.map((video, index) => {
-              const title = video.path ? video.path.split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
-              const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
-              return (
-                <div key={index} className="video-card" onClick={() => playVideo(video.path)} title={title}>
-                  <LazyImage
-                    src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
-                    alt={title || 'thumbnail'}
-                    className="video-thumbnail"
-                    width={320}
-                    height={180}
-                  />
-                  <div className="card-content">
-                    <div className="card-title" title={title}>{title}</div>
-                    <div className="card-metadata">{extension} • Video File</div>
-                    <div className="card-actions">
-                      <button className="primary" onClick={(e) => {e.stopPropagation(); playVideo(video.path)}}>Play</button>
-                      <button onClick={(e) => {e.stopPropagation(); deleteVideo(video.path)}}>Delete</button>
+          <>
+            <div className="library-header">
+              <div className="library-header-top">
+                <div className="library-info">
+                  <h2 className="library-title">Video Library</h2>
+                  <div className="library-stats">
+                    <div className="stats-item">
+                      <span>📹</span>
+                      <span>{videos.length} videos</span>
                     </div>
+                    {getVideoExtensions().length > 0 && (
+                      <div className="stats-item">
+                        <span>📁</span>
+                        <span>{getVideoExtensions().join(', ')}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="view-controls">
+                  <div className="view-toggle">
+                    <button 
+                      className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                      onClick={() => setViewMode('grid')}
+                    >
+                      <span>⊞</span> Grid
+                    </button>
+                    <button 
+                      className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                      onClick={() => setViewMode('list')}
+                    >
+                      <span>☰</span> List
+                    </button>
+                    <button 
+                      className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`}
+                      onClick={() => setViewMode('compact')}
+                    >
+                      <span>⊡</span> Compact
+                    </button>
+                  </div>
+                  <div className="sort-dropdown">
+                    <select 
+                      className="sort-btn"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size')}
+                      title="Sort videos by"
+                    >
+                      <option value="name">Sort by Name</option>
+                      <option value="date">Sort by Date</option>
+                      <option value="size">Sort by Size</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={`video-grid-container ${viewMode}-view`}>
+              {isLoading && (
+                <div className="loading">
+                  <div className="loading-spinner"></div>
+                  <span>Loading videos...</span>
+                </div>
+              )}
+              {!isLoading && videos.length === 0 && (
+                <div className="empty-state">
+                  <div className="empty-state-icon">🎬</div>
+                  <h3>Welcome to EwPlayer</h3>
+                  <p>Your video library is empty. Browse a directory or open a single file to get started.</p>
+                  <div className="empty-state-actions">
+                    <button className="browse-btn" onClick={selectDirectory}>Browse Folder</button>
+                    <button className="browse-btn secondary" onClick={openSingleFile}>Open File</button>
+                  </div>
+                </div>
+              )}
+              {!isLoading && videos.length > 0 && sortedVideos.length === 0 && (
+                <div className="no-results">
+                  <div className="no-results-icon">🔍</div>
+                  <span>No videos match your search.</span>
+                </div>
+              )}
+              {sortedVideos.map((video, index) => {
+                const title = video.path ? video.path.split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
+                const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
+                return (
+                  <div key={index} className={`video-card ${viewMode}-style`} onClick={() => playVideo(video.path)} title={title}>
+                    <div className="video-thumbnail-container">
+                      <LazyImage
+                        src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
+                        alt={title || 'thumbnail'}
+                        className="video-thumbnail"
+                        width={320}
+                        height={180}
+                      />
+                      <div className="quality-badge">{extension}</div>
+                    </div>
+                    <div className="card-content">
+                      <div className="card-title" title={title}>{title}</div>
+                      <div className="card-metadata">
+                        <div className="metadata-item">
+                          <span>📄</span>
+                          <span>{extension} • Video File</span>
+                        </div>
+                      </div>
+                      <div className="card-actions">
+                        <button className="primary" onClick={(e) => {e.stopPropagation(); playVideo(video.path)}}>Play</button>
+                        <button onClick={(e) => {e.stopPropagation(); showInExplorer(video.path)}}>Show in Folder</button>
+                        <button onClick={(e) => {e.stopPropagation(); deleteVideo(video.path)}}>Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>
