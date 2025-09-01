@@ -1,7 +1,7 @@
 {
   "name": "ewplayer",
   "productName": "EwPlayer",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Native Windows video player with library management",
   "main": "dist/main.js",
   "homepage": ".",
@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.ewplayer.app",
     "productName": "EwPlayer",
-  "copyright": "Copyright (c) 2025 EwPlayer Team",
+  "copyright": "Copyright (c) 2025 James Knox",
     "directories": {
       "output": "release-build"
     },
@@ -77,6 +77,12 @@
           "ext": "flv",
           "name": "FLV Video",
           "description": "Flash Video File",
+          "icon": "assets/video-icon.ico"
+        },
+        {
+          "ext": "m2ts",
+          "name": "M2TS Video",
+          "description": "MPEG-2 Transport Stream",
           "icon": "assets/video-icon.ico"
         }
       ]

@@ -65,7 +65,7 @@ else {
             mainWindow.focus();
             // Handle file opened from command line in second instance
             const filePath = commandLine.find(arg => arg.endsWith('.mp4') || arg.endsWith('.avi') ||
-                arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv'));
+                arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
             if (filePath && fs.existsSync(filePath)) {
                 mainWindow.webContents.send('open-file', filePath);
             }
@@ -73,7 +73,7 @@ else {
     });
     // Handle file opened from command line on first instance
     const filePath = process.argv.find(arg => arg.endsWith('.mp4') || arg.endsWith('.avi') ||
-        arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv'));
+        arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
     if (filePath && fs.existsSync(filePath)) {
         fileToOpen = filePath;
     }
@@ -228,7 +228,7 @@ electron_1.ipcMain.handle('choose-disc-drive', async () => {
         return null;
     return `${safeDrives[idx].letter}:/`;
 });
-// Scan a disc for playable content or DVD-Video structure
+// Scan a disc for playable content or DVD-Video/Blu-ray structure
 electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
     try {
         if (!driveRoot)
@@ -236,7 +236,8 @@ electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
         const root = driveRoot.replace(/\\/g, '/');
         const normalized = /:\/$/.test(root) ? root : (root.endsWith('/') ? root : root + '/');
         const videoTs = path.join(normalized, 'VIDEO_TS');
-        const supportedExt = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'];
+        const bdmv = path.join(normalized, 'BDMV');
+        const supportedExt = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'];
         if (fs.existsSync(videoTs) && fs.statSync(videoTs).isDirectory()) {
             // DVD-Video detected; select VTS with largest total size
             const files = fs.readdirSync(videoTs).filter(f => /\.VOB$/i.test(f));
@@ -264,13 +265,43 @@ electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
             }
             return { kind: 'dvd', vobs: [] };
         }
+        if (fs.existsSync(bdmv) && fs.statSync(bdmv).isDirectory()) {
+            // Blu-ray detected; look for STREAM folder and M2TS files
+            const streamDir = path.join(bdmv, 'STREAM');
+            if (fs.existsSync(streamDir) && fs.statSync(streamDir).isDirectory()) {
+                const files = fs.readdirSync(streamDir).filter(f => /\.M2TS$/i.test(f));
+                const groups = {};
+                for (const f of files) {
+                    const m = f.match(/^(\d{5})\.M2TS$/i);
+                    if (!m)
+                        continue;
+                    const key = m[1];
+                    const full = path.join(streamDir, f);
+                    let size = 0;
+                    try {
+                        size = fs.statSync(full).size;
+                    }
+                    catch (_b) { }
+                    if (!groups[key])
+                        groups[key] = { total: 0, parts: [] };
+                    groups[key].total += size;
+                    groups[key].parts.push(full);
+                }
+                const best = Object.entries(groups).sort((a, b) => b[1].total - a[1].total)[0];
+                if (best && best[1].parts.length) {
+                    const m2ts = best[1].parts.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                    return { kind: 'bluray', m2ts };
+                }
+                return { kind: 'bluray', m2ts: [] };
+            }
+        }
         // Otherwise, treat as data disc; scan up to depth 3
         const results = [];
         const thumbsDir = path.join(electron_1.app.getPath('userData'), 'thumbnails');
         try {
             fs.mkdirSync(thumbsDir, { recursive: true });
         }
-        catch (_b) { }
+        catch (_c) { }
         const scan = (dir, depth) => {
             if (depth > 3)
                 return;
@@ -310,20 +341,20 @@ electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
         return { kind: 'none', error: String(e) };
     }
 });
-// Convert a DVD title (list of VOB files) to an MP4 we can play (H.264/AAC)
-electron_1.ipcMain.handle('convert-dvd-title', async (event, vobPaths) => {
-    if (!Array.isArray(vobPaths) || vobPaths.length === 0)
+// Convert a disc title (list of VOB or M2TS files) to an MP4 we can play (H.264/AAC)
+electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
+    if (!Array.isArray(filePaths) || filePaths.length === 0)
         return null;
     try {
-        const cacheDir = path.join(electron_1.app.getPath('userData'), 'dvd-cache');
+        const cacheDir = path.join(electron_1.app.getPath('userData'), 'disc-cache');
         try {
             fs.mkdirSync(cacheDir, { recursive: true });
         }
         catch (_a) { }
         const listFile = path.join(cacheDir, `concat-${Date.now()}.txt`);
-        const outFile = path.join(cacheDir, `dvd-${Date.now()}.mp4`);
+        const outFile = path.join(cacheDir, `disc-${Date.now()}.mp4`);
         // Write concat list
-        const listContent = vobPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join(os.EOL);
+        const listContent = filePaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join(os.EOL);
         fs.writeFileSync(listFile, listContent, 'utf8');
         // Use fluent-ffmpeg to run the conversion
         const result = await new Promise((resolve, reject) => {
@@ -359,7 +390,7 @@ electron_1.ipcMain.handle('convert-dvd-title', async (event, vobPaths) => {
         return result || null;
     }
     catch (e) {
-        console.error('convert-dvd-title error', e);
+        console.error('convert-disc-title error', e);
         return null;
     }
 });
@@ -378,7 +409,7 @@ electron_1.ipcMain.handle('open-file-dialog', async () => {
         filters: [
             {
                 name: 'Video Files',
-                extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv']
+                extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'm2ts']
             }
         ]
     });
@@ -405,6 +436,16 @@ electron_1.ipcMain.handle('get-file-info', async (event, filePath) => {
     }
 });
 electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
+    console.log('Main process: scan-videos called with dirPath:', dirPath);
+    // Check if directory exists
+    if (!fs.existsSync(dirPath)) {
+        console.error('Directory does not exist:', dirPath);
+        return [];
+    }
+    if (!fs.statSync(dirPath).isDirectory()) {
+        console.error('Path is not a directory:', dirPath);
+        return [];
+    }
     const videos = [];
     function scanDir(dir) {
         try {
@@ -417,7 +458,7 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
                 }
                 else {
                     const ext = path.extname(file).toLowerCase();
-                    if (['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'].includes(ext)) {
+                    if (['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'].includes(ext)) {
                         const thumbsDir = path.join(electron_1.app.getPath('userData'), 'thumbnails');
                         try {
                             fs.mkdirSync(thumbsDir, { recursive: true });
@@ -435,39 +476,55 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
     }
     scanDir(dirPath);
     console.log('Found videos:', videos.length);
-    // Generate thumbnails synchronously for better UX
+    // Generate thumbnails with caching
     for (const video of videos) {
         try {
-            await new Promise((resolve, reject) => {
-                // First get video duration to calculate 50% point
-                fluent_ffmpeg_1.default.ffprobe(video.path, (err, metadata) => {
-                    var _a;
-                    if (err) {
-                        console.error('Error getting video metadata:', err);
-                        resolve(false);
-                        return;
-                    }
-                    const duration = ((_a = metadata.format) === null || _a === void 0 ? void 0 : _a.duration) || 0;
-                    const midPoint = Math.floor(duration / 2); // 50% of video duration
-                    const timemarkSeconds = midPoint > 0 ? midPoint : 20; // Fallback to 1 second if duration can't be determined
-                    (0, fluent_ffmpeg_1.default)(video.path)
-                        .screenshots({
-                        count: 1,
-                        folder: path.dirname(video.thumbnail),
-                        filename: path.basename(video.thumbnail),
-                        timemarks: [timemarkSeconds.toString()],
-                        size: '320x180'
-                    })
-                        .on('end', () => {
-                        console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (50% of ${duration}s)`);
-                        resolve(true);
-                    })
-                        .on('error', (err) => {
-                        console.error('Error generating thumbnail:', err);
-                        resolve(false); // Don't fail the whole process
+            // Check if thumbnail already exists and is recent (within 24 hours)
+            const thumbnailExists = fs.existsSync(video.thumbnail);
+            let needsGeneration = true;
+            if (thumbnailExists) {
+                const thumbnailStats = fs.statSync(video.thumbnail);
+                const videoStats = fs.statSync(video.path);
+                const thumbnailAge = Date.now() - thumbnailStats.mtime.getTime();
+                const videoModified = videoStats.mtime.getTime();
+                // Regenerate if thumbnail is older than video file or older than 7 days
+                if (thumbnailStats.mtime.getTime() >= videoModified && thumbnailAge < 7 * 24 * 60 * 60 * 1000) {
+                    needsGeneration = false;
+                    console.log('Using cached thumbnail for', path.basename(video.path));
+                }
+            }
+            if (needsGeneration) {
+                await new Promise((resolve, reject) => {
+                    // First get video duration to calculate 50% point
+                    fluent_ffmpeg_1.default.ffprobe(video.path, (err, metadata) => {
+                        var _a;
+                        if (err) {
+                            console.error('Error getting video metadata:', err);
+                            resolve(false);
+                            return;
+                        }
+                        const duration = ((_a = metadata.format) === null || _a === void 0 ? void 0 : _a.duration) || 0;
+                        const midPoint = Math.floor(duration / 2); // 50% of video duration
+                        const timemarkSeconds = midPoint > 0 ? midPoint : 20; // Fallback to 1 second if duration can't be determined
+                        (0, fluent_ffmpeg_1.default)(video.path)
+                            .screenshots({
+                            count: 1,
+                            folder: path.dirname(video.thumbnail),
+                            filename: path.basename(video.thumbnail),
+                            timemarks: [timemarkSeconds.toString()],
+                            size: '320x180'
+                        })
+                            .on('end', () => {
+                            console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (50% of ${duration}s)`);
+                            resolve(true);
+                        })
+                            .on('error', (err) => {
+                            console.error('Error generating thumbnail:', err);
+                            resolve(false); // Don't fail the whole process
+                        });
                     });
                 });
-            });
+            }
         }
         catch (error) {
             console.error('Thumbnail generation failed for:', video.path);
@@ -504,5 +561,62 @@ electron_1.ipcMain.handle('window-maximize', () => {
 electron_1.ipcMain.handle('window-close', () => {
     if (mainWindow) {
         mainWindow.close();
+    }
+});
+// Settings IPC handlers
+electron_1.ipcMain.handle('load-settings', async () => {
+    try {
+        const settingsPath = path.join(electron_1.app.getPath('userData'), 'settings.json');
+        console.log('Main process: Loading settings from:', settingsPath);
+        if (fs.existsSync(settingsPath)) {
+            const data = fs.readFileSync(settingsPath, 'utf8');
+            const parsed = JSON.parse(data);
+            console.log('Main process: Loaded settings:', parsed);
+            return parsed;
+        }
+        console.log('Main process: No settings file found, returning empty object');
+        return {}; // Default empty settings
+    }
+    catch (error) {
+        console.error('Error loading settings:', error);
+        return {};
+    }
+});
+electron_1.ipcMain.handle('save-settings', async (event, settings) => {
+    try {
+        const settingsPath = path.join(electron_1.app.getPath('userData'), 'settings.json');
+        console.log('Main process: Saving settings:', settings);
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        console.log('Main process: Settings saved successfully to:', settingsPath);
+        return true;
+    }
+    catch (error) {
+        console.error('Error saving settings:', error);
+        return false;
+    }
+});
+// Clear thumbnail cache
+electron_1.ipcMain.handle('clear-thumbnail-cache', async () => {
+    try {
+        const thumbsDir = path.join(electron_1.app.getPath('userData'), 'thumbnails');
+        if (fs.existsSync(thumbsDir)) {
+            const files = fs.readdirSync(thumbsDir);
+            for (const file of files) {
+                const filePath = path.join(thumbsDir, file);
+                try {
+                    fs.unlinkSync(filePath);
+                }
+                catch (error) {
+                    console.error('Error deleting cached thumbnail:', filePath, error);
+                }
+            }
+            console.log('Thumbnail cache cleared');
+            return true;
+        }
+        return true;
+    }
+    catch (error) {
+        console.error('Error clearing thumbnail cache:', error);
+        return false;
     }
 });
