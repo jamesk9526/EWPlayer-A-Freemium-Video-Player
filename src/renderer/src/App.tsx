@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import './App.css';
+import SettingsPanel from './SettingsPanel';
+import Library from './Library';
+import Player from './Player';
+import MultiPlayer from './components/MultiPlayer';
 
 const ipcRenderer = (window as any).require('electron').ipcRenderer;
 
@@ -13,6 +17,7 @@ interface Video {
   contentType?: 'movie' | 'tv-show' | 'home-media';
   category?: string;
   isPrivate?: boolean;
+  isFavorite?: boolean;
   title?: string;
   season?: number;
   episode?: number;
@@ -158,10 +163,12 @@ const LazyImage = ({ src, alt, className, width, height }: {
 };
 
 // Theater-style Streaming Interface Component
-const StreamingInterface = ({ videos, userProfile, onVideoSelect }: {
+const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, currentPage }: {
   videos: Video[];
   userProfile: UserProfile | null;
   onVideoSelect: (path: string) => void;
+  settings: any;
+  currentPage: string;
 }) => {
   const [selectedShow, setSelectedShow] = useState<string | null>(null);
   const [selectedShowData, setSelectedShowData] = useState<any>(null);
@@ -568,23 +575,74 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect }: {
 
   const featuredVideo = continueWatching[0] || movies[0] || tvShows[0]?.firstEpisode || homeMedia[0] || fallbackVideos[0];
 
+  // Page-specific content filtering
+  const getPageContent = () => {
+    switch (currentPage) {
+      case 'tv':
+        return {
+          title: 'TV Shows',
+          featuredVideo: tvShows[0]?.firstEpisode || continueWatching.find(v => v.contentType === 'tv-show') || null,
+          rows: [
+            { title: 'Continue Watching TV', items: continueWatching.filter(v => v.contentType === 'tv-show'), type: 'continue', isShowGroup: false },
+            { title: 'Popular TV Shows', items: tvShows, type: 'default', isShowGroup: true },
+            { title: 'Recently Added TV', items: tvShows.slice(0, 10), type: 'default', isShowGroup: true }
+          ]
+        };
+      case 'movies':
+        return {
+          title: 'Movies',
+          featuredVideo: movies[0] || continueWatching.find(v => v.contentType === 'movie') || null,
+          rows: [
+            { title: 'Continue Watching Movies', items: continueWatching.filter(v => v.contentType === 'movie'), type: 'continue', isShowGroup: false },
+            { title: 'Popular Movies', items: movies, type: 'default', isShowGroup: false },
+            { title: 'Recently Added Movies', items: movies.slice(0, 10), type: 'default', isShowGroup: false }
+          ]
+        };
+      case 'my-list':
+        return {
+          title: 'My List',
+          featuredVideo: videos.find(v => v.isPrivate === true) || continueWatching[0] || null,
+          rows: [
+            { title: 'Continue Watching', items: continueWatching, type: 'continue', isShowGroup: false },
+            { title: 'My Favorites', items: videos.filter(v => v.isPrivate === true), type: 'default', isShowGroup: false },
+            { title: 'Watch Later', items: videos.filter(v => !v.watchedProgress || v.watchedProgress === 0), type: 'default', isShowGroup: false }
+          ]
+        };
+      case 'home':
+      default:
+        return {
+          title: 'Home',
+          featuredVideo: continueWatching[0] || movies[0] || tvShows[0]?.firstEpisode || homeMedia[0] || null,
+          rows: [
+            { title: 'Continue Watching', items: continueWatching, type: 'continue', isShowGroup: false },
+            { title: 'Movies', items: movies, type: 'default', isShowGroup: false },
+            { title: 'TV Shows', items: tvShows, type: 'default', isShowGroup: true },
+            { title: 'Home Videos', items: homeMedia, type: 'default', isShowGroup: false },
+            ...(allVideosVisible ? [{ title: 'All Videos', items: fallbackVideos, type: 'default' as const, isShowGroup: false }] : [])
+          ]
+        };
+    }
+  };
+
+  const pageContent = getPageContent();
+
   return (
     <div className="streaming-interface">
       {/* Show message if no videos at all */}
       {videos.length === 0 ? (
-        <div className="empty-state" style={{ textAlign: 'center', padding: '4rem', color: 'white' }}>
-          <div style={{ fontSize: '4rem', marginBottom: '2rem' }}>📁</div>
+        <div className="empty-state">
+          <div className="empty-state-icon">📁</div>
           <h2>No videos found</h2>
           <p>Add some videos to your library to see them here in theater mode</p>
         </div>
       ) : (
         <>
           {/* Hero Section */}
-          {featuredVideo && (
+          {pageContent.featuredVideo && (
             <div className="hero-section">
               <div className="hero-background">
                 <LazyImage
-                  src={featuredVideo.thumbnail ? toFileUrl(featuredVideo.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyMCIgaGVpZ2h0PSIxMDgwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxOTIwIiBoZWlnaHQ9IjEwODAiIGZpbGw9IiMzMzMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0iI2ZmZmZmZiIgZm9udC1zaXplPSI0OCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9IjAuM2VtIj5GZWF0dXJlZDwvdGV4dD48L3N2Zz4='}
+                  src={pageContent.featuredVideo.thumbnail ? toFileUrl(pageContent.featuredVideo.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyMCIgaGVpZ2h0PSIxMDgwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxOTIwIiBoZWlnaHQ9IjEwODAiIGZpbGw9IiMzMzMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0iI2ZmZmZmZiIgZm9udC1zaXplPSI0OCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9IjAuM2VtIj5GZWF0dXJlZDwvdGV4dD48L3N2Zz4='}
                   alt="Featured content"
                   className="hero-image"
                   width={1920}
@@ -593,12 +651,12 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect }: {
                 <div className="hero-gradient"></div>
               </div>
               <div className="hero-content">
-                <h1 className="hero-title">{featuredVideo.title || featuredVideo.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '')}</h1>
-                {featuredVideo.year && <div className="hero-year">{featuredVideo.year}</div>}
+                <h1 className="hero-title">{pageContent.featuredVideo.title || pageContent.featuredVideo.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '')}</h1>
+                {pageContent.featuredVideo.year && <div className="hero-year">{pageContent.featuredVideo.year}</div>}
                 <div className="hero-actions">
                   <button 
                     className="hero-play-btn"
-                    onClick={() => onVideoSelect(featuredVideo.path)}
+                    onClick={() => onVideoSelect(pageContent.featuredVideo.path)}
                   >
                     ▶ Play
                   </button>
@@ -610,50 +668,19 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect }: {
 
           {/* Content Rows */}
           <div className="content-rows">
-            <CategoryRow 
-              title="Continue Watching" 
-              items={continueWatching} 
-              type="continue" 
-              onCategoryClick={() => {
-                setCurrentView('category');
-                setCategoryData({ title: 'Continue Watching', items: continueWatching, isShowGroup: false });
-              }}
-            />
-            <CategoryRow 
-              title="Movies" 
-              items={movies}
-              onCategoryClick={() => {
-                setCurrentView('category');
-                setCategoryData({ title: 'Movies', items: movies, isShowGroup: false });
-              }}
-            />
-            <CategoryRow 
-              title="TV Shows" 
-              items={tvShows} 
-              isShowGroup={true}
-              onCategoryClick={() => {
-                setCurrentView('category');
-                setCategoryData({ title: 'TV Shows', items: tvShows, isShowGroup: true });
-              }}
-            />
-            <CategoryRow 
-              title="Home Videos" 
-              items={homeMedia}
-              onCategoryClick={() => {
-                setCurrentView('category');
-                setCategoryData({ title: 'Home Videos', items: homeMedia, isShowGroup: false });
-              }}
-            />
-            {allVideosVisible && (
-              <CategoryRow 
-                title="All Videos" 
-                items={fallbackVideos}
-                onCategoryClick={() => {
+            {pageContent.rows.map((row, index) => (
+              <CategoryRow
+                key={index}
+                title={row.title}
+                items={row.items}
+                type={row.type}
+                isShowGroup={row.isShowGroup}
+                onCategoryClick={row.type !== 'continue' ? () => {
                   setCurrentView('category');
-                  setCategoryData({ title: 'All Videos', items: fallbackVideos, isShowGroup: false });
-                }}
+                  setCategoryData({ title: row.title, items: row.items, isShowGroup: row.isShowGroup || false });
+                } : undefined}
               />
-            )}
+            ))}
           </div>
         </>
       )}
@@ -735,6 +762,11 @@ const SettingsPage = ({
             <label htmlFor="auto-detect-series">Auto-detect TV series</label>
             <input type="checkbox" id="auto-detect-series" defaultChecked={settings.autoDetectSeries !== false} />
             <span className="setting-description">Automatically group episodes into series based on naming patterns</span>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="hide-incompatible-formats">Hide incompatible formats</label>
+            <input type="checkbox" id="hide-incompatible-formats" defaultChecked={settings.hideIncompatibleFormats !== false} />
+            <span className="setting-description">Only show supported video formats (MP4, MKV, MOV, WMV, FLV, M2TS)</span>
           </div>
           <div className="setting-item">
             <label htmlFor="sort-order">Default sort order</label>
@@ -971,12 +1003,14 @@ const SettingsPage = ({
             <input type="checkbox" id="cache-thumbnails" defaultChecked={settings.cacheThumbnails !== false} />
           </div>
           <div className="setting-item">
-            <label htmlFor="default-view">Default view mode</label>
-            <select id="default-view" defaultValue={settings.defaultView || "grid"}>
-              <option value="grid">Grid</option>
-              <option value="list">List</option>
-              <option value="compact">Compact</option>
+            <label htmlFor="card-size">Video card size</label>
+            <select id="card-size" defaultValue={settings.cardSize || "medium"}>
+              <option value="small">Small (200px)</option>
+              <option value="medium">Medium (280px)</option>
+              <option value="large">Large (360px)</option>
+              <option value="extra-large">Extra Large (440px)</option>
             </select>
+            <span className="setting-description">Adjust the size of video cards in the library</span>
           </div>
         </div>
 
@@ -1123,6 +1157,177 @@ function App() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+
+  // Hash routing for MultiPlayer
+  const [route, setRoute] = useState(window.location.hash.replace('#', '') || '/');
+
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      setRoute(window.location.hash.replace('#', '') || '/');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Advanced search parsing
+  const parseSearchQuery = (query: string) => {
+    const filters: any = {
+      text: '',
+      resolution: null,
+      format: null,
+      year: null,
+      type: null
+    };
+
+    // Parse resolution syntax: <1080>, <4k>, <2060>, etc.
+    const resolutionMatch = query.match(/<(\d{3,4}|4k|8k)>/i);
+    if (resolutionMatch) {
+      const res = resolutionMatch[1].toLowerCase();
+      if (res === '4k') filters.resolution = '2160';
+      else if (res === '8k') filters.resolution = '4320';
+      else filters.resolution = res;
+      query = query.replace(resolutionMatch[0], '').trim();
+    }
+
+    // Parse format syntax: [mp4], [mkv], etc.
+    const formatMatch = query.match(/\[(\w+)\]/i);
+    if (formatMatch) {
+      filters.format = formatMatch[1].toLowerCase();
+      query = query.replace(formatMatch[0], '').trim();
+    }
+
+    // Parse year syntax: (2020), (2015-2020), etc.
+    const yearMatch = query.match(/\((\d{4}(?:-\d{4})?)\)/);
+    if (yearMatch) {
+      filters.year = yearMatch[1];
+      query = query.replace(yearMatch[0], '').trim();
+    }
+
+    // Parse type syntax: {movie}, {tv}, {home}
+    const typeMatch = query.match(/\{(movie|tv|home)\}/i);
+    if (typeMatch) {
+      filters.type = typeMatch[1].toLowerCase();
+      query = query.replace(typeMatch[0], '').trim();
+    }
+
+    filters.text = query;
+    return filters;
+  };
+
+  // Generate search suggestions
+  const generateSuggestions = (query: string, videos: Video[]) => {
+    if (!query || query.length < 2) return [];
+
+    const suggestions = new Set<string>();
+    const lowerQuery = query.toLowerCase();
+
+    videos.forEach(video => {
+      const fileName = video.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+      const title = video.title?.toLowerCase() || '';
+      const year = video.year?.toString() || '';
+
+      // Add filename matches
+      if (fileName.includes(lowerQuery)) {
+        suggestions.add(fileName);
+      }
+
+      // Add title matches
+      if (title.includes(lowerQuery)) {
+        suggestions.add(video.title || '');
+      }
+
+      // Add year matches
+      if (year.includes(lowerQuery)) {
+        suggestions.add(year);
+      }
+
+      // Add format suggestions
+      const extension = video.path.split('.').pop()?.toLowerCase();
+      if (extension && extension.includes(lowerQuery)) {
+        suggestions.add(`[${extension}]`);
+      }
+
+      // Add resolution suggestions based on filename patterns
+      if (lowerQuery.includes('1080') || lowerQuery.includes('hd')) {
+        suggestions.add('<1080>');
+      }
+      if (lowerQuery.includes('2160') || lowerQuery.includes('4k')) {
+        suggestions.add('<4k>');
+      }
+      if (lowerQuery.includes('4320') || lowerQuery.includes('8k')) {
+        suggestions.add('<8k>');
+      }
+
+      // Add type suggestions
+      if (video.contentType === 'movie' && (lowerQuery.includes('movie') || lowerQuery.includes('film'))) {
+        suggestions.add('{movie}');
+      }
+      if (video.contentType === 'tv-show' && lowerQuery.includes('tv')) {
+        suggestions.add('{tv}');
+      }
+      if (video.contentType === 'home-media' && lowerQuery.includes('home')) {
+        suggestions.add('{home}');
+      }
+    });
+
+    return Array.from(suggestions).slice(0, 8); // Limit to 8 suggestions
+  };
+
+  // Enhanced search filtering
+  const matchesSearchFilters = (video: Video, filters: any) => {
+    const fileName = video.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+    const title = video.title?.toLowerCase() || '';
+    const fullPath = video.path.toLowerCase();
+
+    // Text search
+    if (filters.text) {
+      const searchText = filters.text.toLowerCase();
+      if (!fileName.includes(searchText) && !title.includes(searchText) && !fullPath.includes(searchText)) {
+        return false;
+      }
+    }
+
+    // Resolution filter
+    if (filters.resolution) {
+      const hasResolution = fileName.includes(filters.resolution) ||
+                           fileName.includes('p') && fileName.includes(filters.resolution) ||
+                           (filters.resolution === '2160' && (fileName.includes('4k') || fileName.includes('2160'))) ||
+                           (filters.resolution === '4320' && (fileName.includes('8k') || fileName.includes('4320')));
+      if (!hasResolution) return false;
+    }
+
+    // Format filter
+    if (filters.format) {
+      const extension = video.path.split('.').pop()?.toLowerCase();
+      if (extension !== filters.format) return false;
+    }
+
+    // Year filter
+    if (filters.year) {
+      if (filters.year.includes('-')) {
+        // Year range: (2015-2020)
+        const [start, end] = filters.year.split('-').map((y: string) => parseInt(y));
+        if (!video.year || video.year < start || video.year > end) return false;
+      } else {
+        // Single year: (2020)
+        if (!video.year || video.year !== parseInt(filters.year)) return false;
+      }
+    }
+
+    // Type filter
+    if (filters.type) {
+      const typeMap: any = {
+        'movie': 'movie',
+        'tv': 'tv-show',
+        'home': 'home-media'
+      };
+      if (video.contentType !== typeMap[filters.type]) return false;
+    }
+
+    return true;
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [videoKey, setVideoKey] = useState(0); // For triggering video element re-animation
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
@@ -1484,989 +1689,301 @@ function App() {
   };
 
   const filteredVideos = videos.filter(video => {
-    // Apply search term filter
-    if (searchTerm && !video.path.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
+    // Apply search term filter with advanced syntax
+    if (searchTerm) {
+      const filters = parseSearchQuery(searchTerm);
+      if (!matchesSearchFilters(video, filters)) {
+        return false;
+      }
     }
-    
+
     // Apply excluded folders filter
     if (settings.excludedFolders) {
-      const isExcluded = settings.excludedFolders.some((excludedFolder: string) => 
+      const isExcluded = settings.excludedFolders.some((excludedFolder: string) =>
         video.path.startsWith(excludedFolder)
       );
       if (isExcluded) return false;
     }
-    
+
+    // Apply video format compatibility filter
+    if (settings.hideIncompatibleFormats !== false) {
+      const supportedExtensions = ['.mp4', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'];
+      const fileExtension = video.path.toLowerCase().substring(video.path.lastIndexOf('.'));
+      if (!supportedExtensions.includes(fileExtension)) {
+        return false;
+      }
+    }
+
     // Apply unwatched filter
     if (settings.filterUnwatched && video.watchedProgress && video.watchedProgress > 0) {
       return false;
     }
-    
+
     // Apply short videos filter (if we had duration data)
     // if (settings.hideShortVideos && video.duration && video.duration < 300) {
     //   return false;
     // }
-    
+
     return true;
   });
 
-  const sortedVideos = [...filteredVideos].sort((a, b) => {
-    const sortOrder = settings.sortOrder || 'name-asc';
-    const [field, direction] = sortOrder.split('-');
-    
-    let comparison = 0;
-    
-    switch (field) {
-      case 'name':
-        const nameA = a.path.split(/[/\\]/).pop()?.toLowerCase() || '';
-        const nameB = b.path.split(/[/\\]/).pop()?.toLowerCase() || '';
-        comparison = nameA.localeCompare(nameB);
-        break;
-      case 'date':
-        // For now, sort by path as we don't have date info
-        comparison = a.path.localeCompare(b.path);
-        break;
-      case 'size':
-        // For now, sort by path as we don't have size info
-        comparison = a.path.localeCompare(b.path);
-        break;
-      case 'modified':
-        // For now, sort by path as we don't have modified date info
-        comparison = a.path.localeCompare(b.path);
-        break;
-      default:
-        comparison = a.path.localeCompare(b.path);
-    }
-    
-    return direction === 'desc' ? -comparison : comparison;
-  });
+  const getPageFilteredVideos = (page: string) => {
+    let pageFiltered = filteredVideos;
 
-  const getVideoExtensions = () => {
-    const extensions = new Set(videos.map(v => v.path.split('.').pop()?.toUpperCase()).filter(Boolean));
-    return Array.from(extensions);
+    switch (page) {
+      case 'tv':
+        pageFiltered = filteredVideos.filter(video => video.contentType === 'tv-show');
+        break;
+      case 'movies':
+        pageFiltered = filteredVideos.filter(video => video.contentType === 'movie');
+        break;
+      case 'my-list':
+        // For now, show videos marked as favorites or in a custom list
+        // This can be expanded later with a proper favorites system
+        pageFiltered = filteredVideos.filter(video => video.isPrivate === true || (video.watchedProgress && video.watchedProgress > 0));
+        break;
+      case 'home':
+      default:
+        pageFiltered = filteredVideos;
+        break;
+    }
+
+    return pageFiltered;
+  };
+
+  const getPageSortedVideos = (page: string) => {
+    const pageFiltered = getPageFilteredVideos(page);
+    return [...pageFiltered].sort((a, b) => {
+      const sortOrder = settings.sortOrder || 'name-asc';
+      const [field, direction] = sortOrder.split('-');
+      
+      let comparison = 0;
+      
+      switch (field) {
+        case 'name':
+          const nameA = a.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+          const nameB = b.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+          comparison = nameA.localeCompare(nameB);
+          break;
+        case 'date':
+          // For now, sort by path as we don't have date info
+          comparison = a.path.localeCompare(b.path);
+          break;
+        case 'size':
+          // For now, sort by path as we don't have size info
+          comparison = a.path.localeCompare(b.path);
+          break;
+        case 'modified':
+          // For now, sort by path as we don't have modified date info
+          comparison = a.path.localeCompare(b.path);
+          break;
+        default:
+          comparison = a.path.localeCompare(b.path);
+      }
+      
+      return direction === 'desc' ? -comparison : comparison;
+    });
   };
 
   return (
     <div className="App">
-      {/* Onboarding Screen */}
-      {showOnboarding && (
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-      )}
-
-      {/* Main App Content */}
-      {!showOnboarding && (
+      {route === '/multi-player' ? (
+        <MultiPlayer />
+      ) : (
         <>
-          <header className="App-header">
-            <div className="header-left">
-              <div className="logo">
-                <div className="logo-icon">▶</div>
-                <h1>EwPlayer</h1>
-              </div>
-              {/* Primary Navigation */}
-              <nav className="primary-nav">
-                <button 
-                  className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
-                  onClick={() => setCurrentPage('home')}
-                >
-                  Home
-                </button>
-                <button 
-                  className={`nav-link ${currentPage === 'tv' ? 'active' : ''}`}
-                  onClick={() => setCurrentPage('tv')}
-                >
-                  TV
-                </button>
-                <button 
-                  className={`nav-link ${currentPage === 'movies' ? 'active' : ''}`}
-                  onClick={() => setCurrentPage('movies')}
-                >
-                  Movies
-                </button>
-                <button 
-                  className={`nav-link ${currentPage === 'my-list' ? 'active' : ''}`}
-                  onClick={() => setCurrentPage('my-list')}
-                >
-                  My List
-                </button>
-              </nav>
-            </div>
-            <div className="search-container">
-              <input 
-                type="text" 
-                className="search-input"
-                placeholder="Search videos..."
-                value={searchTerm}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="header-actions">
-              <button 
-                className="settings-btn"
-                onClick={() => setCurrentPage('settings')}
-                title={userProfile ? `${userProfile.name}'s Settings` : "Settings"}
-              >
-                ⚙️
-              </button>
-            </div>
-            <div className="window-controls">
-              <button className="window-btn minimize-btn" onClick={minimizeWindow}>−</button>
-              <button className="window-btn maximize-btn" onClick={maximizeWindow}>□</button>
-              <button className="window-btn close-btn" onClick={closeWindow}>×</button>
-            </div>
-          </header>
-      <div className={`main-content ${selectedVideo ? 'with-video' : 'no-video'}`}>
-        {selectedVideo ? (
-          <>
-            <div className="player-section">
-              <div className="video-container">
-                <video 
-                  key={videoKey}
-                  src={toFileUrl(selectedVideo)} 
-                  controls 
-                  className="video-player"
-                  poster={toFileUrl(videos.find(v => v.path === selectedVideo)?.thumbnail)}
-                  autoPlay
-                />
-              </div>
-              <div className="video-info">
-                <h2 className="video-title">
-                  {videos.find(v => v.path === selectedVideo)?.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') || 'Video'}
-                </h2>
-                <div className="video-meta">
-                  {videos.find(v => v.path === selectedVideo)?.path.split('.').pop()?.toUpperCase()} • 
-                  Video File
+          {/* Onboarding Screen */}
+          {showOnboarding && (
+            <OnboardingScreen onComplete={handleOnboardingComplete} />
+          )}
+
+          {/* Main App Content */}
+          {!showOnboarding && (
+            <>
+              <header className="App-header">
+                <div className="header-left">
+                  <div className="logo">
+                    <div className="logo-icon">▶</div>
+                    <h1>EwPlayer</h1>
+                  </div>
+                  {/* Primary Navigation */}
+                  <nav className="primary-nav">
+                    <button 
+                      className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
+                      onClick={() => setCurrentPage('home')}
+                    >
+                      Home
+                    </button>
+                    <button 
+                      className={`nav-link ${currentPage === 'tv' ? 'active' : ''}`}
+                      onClick={() => setCurrentPage('tv')}
+                    >
+                      TV
+                    </button>
+                    <button 
+                      className={`nav-link ${currentPage === 'movies' ? 'active' : ''}`}
+                      onClick={() => setCurrentPage('movies')}
+                    >
+                      Movies
+                    </button>
+                    <button 
+                      className={`nav-link ${currentPage === 'my-list' ? 'active' : ''}`}
+                      onClick={() => setCurrentPage('my-list')}
+                    >
+                      My List
+                    </button>
+                  </nav>
                 </div>
-                <div className="video-controls">
-                  <button 
-                    className="control-btn"
-                    onClick={() => setSelectedVideo(null)}
-                  >
-                    ← Back to Library
-                  </button>
-                  <button 
-                    className="control-btn danger"
-                    onClick={() => deleteVideo(selectedVideo)}
-                  >
-                    🗑 Delete Video
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="sidebar">
-              <div className="sidebar-header">
-                <h3>Up Next</h3>
-                <span className="video-count">
-                  {videos.length} video{videos.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              
-              <div className="video-grid">
-                {filteredVideos.map((video, index) => {
-                  const title = video.path ? video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
-                  const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
-                  return (
-                    <div 
-                      key={index} 
-                      className={`video-card ${selectedVideo === video.path ? 'selected' : ''}`} 
-                      onClick={() => playVideo(video.path)} 
-                      title={title}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Play ${title}`}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          playVideo(video.path);
+                <div className="search-container" onClick={() => console.log('Search container clicked')}>
+                  <div className="search-wrapper" onClick={() => console.log('Search wrapper clicked')}>
+                    <input
+                      type="text"
+                      className="search-input"
+                      placeholder="Search videos... (try <1080>, [mp4], {movie}, (2020))"
+                      value={searchTerm}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const value = e.target.value;
+                        setSearchTerm(value);
+                        if (value.length > 0) {
+                          const suggestions = generateSuggestions(value, videos);
+                          setSearchSuggestions(suggestions);
+                          setShowSuggestions(suggestions.length > 0);
+                        } else {
+                          setShowSuggestions(false);
                         }
                       }}
-                    >
-                      <LazyImage
-                        src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
-                        alt={title || 'thumbnail'}
-                        className="video-thumbnail"
-                        width={320}
-                        height={180}
-                      />
-                      <div className="card-content">
-                        <div className="card-title" title={title}>{title}</div>
-                        <div className="card-metadata">{extension} • Video File</div>
-                      </div>
-                      <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          className="primary" 
-                          onClick={() => playVideo(video.path)} 
-                          title={userProfile ? `${userProfile.name}, play this video` : "Play"}
-                          aria-label={`Play ${title}`}
-                        >
-                          ▶
-                        </button>
-                        <button 
-                          onClick={() => showInExplorer(video.path)} 
-                          title={userProfile ? `${userProfile.name}, show this video in folder` : "Show in folder"}
-                          aria-label={`Show ${title} in folder`}
-                        >
-                          📁
-                        </button>
-                        <button 
-                          onClick={() => deleteVideo(video.path)} 
-                          title={userProfile ? `${userProfile.name}, delete this video` : "Delete"}
-                          aria-label={`Delete ${title}`}
-                        >
-                          🗑
-                        </button>
-                      </div>
-                      <div 
-                        className="progress-bar" 
-                        role="progressbar" 
-                        aria-label={`Watched ${video.watchedProgress}%`}
-                        aria-valuenow={video.watchedProgress} 
-                        aria-valuemin={0} 
-                        aria-valuemax={100}
-                        data-progress={`${video.watchedProgress}%`}
-                      >
-                        <div className="progress-fill"></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        ) : currentPage === 'settings' ? (
-          <SettingsPage
-            settings={settings}
-            setSettings={setSettings}
-            saveSettings={saveSettings}
-            userProfile={userProfile}
-            onBack={() => setCurrentPage('home')}
-          />
-        ) : settings.streamingMode ? (
-          <StreamingInterface 
-            videos={filteredVideos}
-            userProfile={userProfile}
-            onVideoSelect={playVideo}
-          />
-        ) : (
-          <>
-            <div className="library-header">
-              <div className="library-header-top">
-                <div className="library-info">
-                  <h2 className="library-title">{userProfile ? `${userProfile.name}'s Video Library` : 'Video Library'}</h2>
-                  <div className="library-stats">
-                    <div className="stats-item">
-                      <span>📹</span>
-                      <span>{videos.length} videos</span>
-                    </div>
-                    {getVideoExtensions().length > 0 && (
-                      <div className="stats-item">
-                        <span>📁</span>
-                        <span>{getVideoExtensions().join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="view-controls">
-                  <div className="view-toggle">
-                    <button 
-                      className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                      onClick={() => setViewMode('grid')}
-                    >
-                      <span>⊞</span> Grid
-                    </button>
-                    <button 
-                      className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-                      onClick={() => setViewMode('list')}
-                    >
-                      <span>☰</span> List
-                    </button>
-                    <button 
-                      className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`}
-                      onClick={() => setViewMode('compact')}
-                    >
-                      <span>⊡</span> Compact
-                    </button>
-                  </div>
-                  <div className="sort-dropdown">
-                    <select 
-                      className="sort-btn"
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size')}
-                      title="Sort videos by"
-                    >
-                      <option value="name">Sort by Name</option>
-                      <option value="date">Sort by Date</option>
-                      <option value="size">Sort by Size</option>
-                    </select>
-                  </div>
-                  <button className="browse-btn secondary" onClick={openDisc} title={userProfile ? `${userProfile.name}, open a DVD or CD` : "Open a DVD or CD"}>Open Disc</button>
-                </div>
-              </div>
-            </div>
-            <div className={`video-grid-container ${viewMode}-view`}>
-              {isLoading && (
-                <div className="loading">
-                  <div className="loading-spinner"></div>
-                  <span>Loading videos...</span>
-                </div>
-              )}
-              {!isLoading && videos.length === 0 && (
-                <div className="empty-state">
-                  <div className="empty-state-icon">🎬</div>
-                  <h3>Welcome{userProfile ? `, ${userProfile.name}` : ''}!</h3>
-                  <p>Your video library is empty. Browse a directory or open a single file to get started.</p>
-                  <div className="empty-state-actions">
-                    <button className="browse-btn" onClick={selectDirectory} title={userProfile ? `${userProfile.name}, browse your video folders` : "Browse video folders"}>Browse Folder</button>
-                    <button className="browse-btn secondary" onClick={openSingleFile} title={userProfile ? `${userProfile.name}, open a single video file` : "Open a single video file"}>Open File</button>
-                    <button className="browse-btn secondary" onClick={openDisc} title={userProfile ? `${userProfile.name}, open a DVD or CD` : "Open a DVD or CD"}>Open Disc</button>
-                  </div>
-                </div>
-              )}
-              {!isLoading && videos.length > 0 && sortedVideos.length === 0 && (
-                <div className="no-results">
-                  <div className="no-results-icon">🔍</div>
-                  <span>No videos match your search.</span>
-                </div>
-              )}
-              {sortedVideos.map((video, index) => {
-                const title = video.path ? video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video';
-                const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
-                return (
-                  <div 
-                    key={index} 
-                    className={`video-card ${viewMode}-style`} 
-                    onClick={() => playVideo(video.path)} 
-                    title={title}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Play ${title}`}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        playVideo(video.path);
-                      }
-                    }}
-                  >
-                    <div className="video-thumbnail-container">
-                      <LazyImage
-                        src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
-                        alt={title || 'thumbnail'}
-                        className="video-thumbnail"
-                        width={320}
-                        height={180}
-                      />
-                      <div className="quality-badge">{extension}</div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-title" title={title}>{title}</div>
-                      <div className="card-metadata">
-                        <div className="metadata-item">
-                          <span>📄</span>
-                          <span>{extension} • Video File</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        className="primary" 
-                        onClick={() => playVideo(video.path)} 
-                        title={userProfile ? `${userProfile.name}, play this video` : "Play"}
-                        aria-label={`Play ${title}`}
-                      >
-                        ▶
-                      </button>
-                      <button 
-                        onClick={() => showInExplorer(video.path)} 
-                        title={userProfile ? `${userProfile.name}, show this video in folder` : "Show in folder"}
-                        aria-label={`Show ${title} in folder`}
-                      >
-                        📁
-                      </button>
-                      <button 
-                        onClick={() => deleteVideo(video.path)} 
-                        title={userProfile ? `${userProfile.name}, delete this video` : "Delete"}
-                        aria-label={`Delete ${title}`}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                    {video.watchedProgress && video.watchedProgress > 0 && (
-                      <div 
-                        className="progress-bar" 
-                        role="progressbar" 
-                        aria-label={`Watched ${video.watchedProgress}%`}
-                        aria-valuenow={video.watchedProgress} 
-                        aria-valuemin={0} 
-                        aria-valuemax={100}
-                        data-progress={`${video.watchedProgress}%`}
-                      >
-                        <div className="progress-fill"></div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
-          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-header">
-              <h2>Settings</h2>
-              <button 
-                className="settings-close-btn"
-                onClick={() => setShowSettings(false)}
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="settings-content">
-              <div className="settings-section">
-                <h3>User Profile</h3>
-                <div className="setting-item">
-                  <label htmlFor="profile-name">Name</label>
-                  <input 
-                    type="text" 
-                    id="profile-name" 
-                    defaultValue={userProfile?.name || ''} 
-                    placeholder="Enter your name"
-                  />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="profile-info">About</label>
-                  <textarea 
-                    id="profile-info" 
-                    defaultValue={userProfile?.info || ''} 
-                    placeholder="Tell us about yourself..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Playback</h3>
-                <div className="setting-item">
-                  <label htmlFor="autoplay">Auto-play next video</label>
-                  <input type="checkbox" id="autoplay" defaultChecked={settings.autoplay || false} />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="loop">Loop playback</label>
-                  <input type="checkbox" id="loop" defaultChecked={settings.loop || false} />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="volume">Default volume</label>
-                  <input type="range" id="volume" min="0" max="100" defaultValue={settings.volume || 70} />
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Advanced Library Controls</h3>
-                <div className="setting-item">
-                  <label htmlFor="group-by-folder">Group by folder structure</label>
-                  <input type="checkbox" id="group-by-folder" defaultChecked={settings.groupByFolder || false} />
-                  <span className="setting-description">Organize videos by their folder hierarchy</span>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="auto-detect-series">Auto-detect TV series</label>
-                  <input type="checkbox" id="auto-detect-series" defaultChecked={settings.autoDetectSeries !== false} />
-                  <span className="setting-description">Automatically group episodes into series based on naming patterns</span>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="show-file-details">Show file details</label>
-                  <input type="checkbox" id="show-file-details" defaultChecked={settings.showFileDetails || false} />
-                  <span className="setting-description">Display file size, resolution, and codec information</span>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="sort-order">Default sort order</label>
-                  <select id="sort-order" defaultValue={settings.sortOrder || "name-asc"}>
-                    <option value="name-asc">Name (A-Z)</option>
-                    <option value="name-desc">Name (Z-A)</option>
-                    <option value="date-asc">Date Added (Oldest First)</option>
-                    <option value="date-desc">Date Added (Newest First)</option>
-                    <option value="size-asc">File Size (Smallest First)</option>
-                    <option value="size-desc">File Size (Largest First)</option>
-                    <option value="modified-asc">Last Modified (Oldest First)</option>
-                    <option value="modified-desc">Last Modified (Newest First)</option>
-                  </select>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="filter-unwatched">Show only unwatched</label>
-                  <input type="checkbox" id="filter-unwatched" defaultChecked={settings.filterUnwatched || false} />
-                  <span className="setting-description">Hide videos that have been watched</span>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="hide-short-videos">Hide short videos</label>
-                  <input type="checkbox" id="hide-short-videos" defaultChecked={settings.hideShortVideos || false} />
-                  <span className="setting-description">Hide videos shorter than 5 minutes</span>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>File & Folder Management</h3>
-                <div className="setting-item">
-                  <label>Marked Files & Folders</label>
-                  <p className="setting-description">
-                    Mark files or folders as favorites, watched, or hidden. Marked items will be highlighted in the library.
-                  </p>
-                  <div className="marked-items-list">
-                    {(settings.markedItems || []).map((item: any, index: number) => (
-                      <div key={index} className="marked-item">
-                        <span className={`marked-type ${item.type}`}>{item.type}</span>
-                        <span className="marked-path" title={item.path}>{item.path.split(/[/\\]/).pop()}</span>
-                        <span className="marked-tags">
-                          {item.tags?.map((tag: string) => (
-                            <span key={tag} className="tag">{tag}</span>
-                          ))}
-                        </span>
-                        <button 
-                          type="button" 
-                          className="remove-marked-btn"
-                          onClick={async () => {
-                            const currentItems = settings.markedItems || [];
-                            const newItems = currentItems.filter((_: any, i: number) => i !== index);
-                            const updatedSettings = { ...settings, markedItems: newItems };
-                            setSettings(updatedSettings);
-                            await saveSettings(updatedSettings);
-                          }}
-                          title="Remove mark"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <div className="marked-item add-new">
-                      <button 
-                        type="button" 
-                        className="add-marked-btn"
-                        onClick={async () => {
-                          try {
-                            const result = await ipcRenderer.invoke('select-file-or-folder');
-                            if (result) {
-                              const currentItems = settings.markedItems || [];
-                              const newItem = {
-                                path: result.path,
-                                type: result.type, // 'file' or 'folder'
-                                tags: ['favorite'],
-                                markedAt: new Date().toISOString()
-                              };
-                              const newItems = [...currentItems, newItem];
-                              const updatedSettings = { ...settings, markedItems: newItems };
-                              setSettings(updatedSettings);
-                              await saveSettings(updatedSettings);
-                            }
-                          } catch (error) {
-                            console.error('Error selecting file/folder:', error);
-                          }
-                        }}
-                        title="Add file or folder"
-                      >
-                        + Add File/Folder
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="setting-item">
-                  <label>Excluded Folders</label>
-                  <p className="setting-description">
-                    These folders will be completely excluded from library scans and won't appear in search results.
-                  </p>
-                  <div className="excluded-folders-list">
-                    {(settings.excludedFolders || []).map((folder: string, index: number) => (
-                      <div key={index} className="excluded-folder-item">
-                        <input 
-                          type="text" 
-                          value={folder} 
-                          readOnly
-                          className="excluded-folder-input"
-                          title={`Excluded folder: ${folder}`}
-                        />
-                        <button 
-                          type="button" 
-                          className="remove-excluded-btn"
-                          onClick={async () => {
-                            const currentFolders = settings.excludedFolders || [];
-                            const newFolders = currentFolders.filter((_: string, i: number) => i !== index);
-                            const updatedSettings = { ...settings, excludedFolders: newFolders };
-                            setSettings(updatedSettings);
-                            await saveSettings(updatedSettings);
-                          }}
-                          title="Remove exclusion"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <div className="excluded-folder-item">
-                      <input 
-                        type="text" 
-                        placeholder="Select a folder to exclude..."
-                        readOnly
-                        className="excluded-folder-input"
-                        title="Click + to exclude a folder"
-                      />
-                      <button 
-                        type="button" 
-                        className="add-excluded-btn"
-                        onClick={async () => {
-                          try {
-                            const folderPath = await ipcRenderer.invoke('select-directory');
-                            if (folderPath) {
-                              const currentFolders = settings.excludedFolders || [];
-                              // Check if folder is already excluded
-                              if (!currentFolders.includes(folderPath)) {
-                                const newFolders = [...currentFolders, folderPath];
-                                const updatedSettings = { ...settings, excludedFolders: newFolders };
-                                setSettings(updatedSettings);
-                                await saveSettings(updatedSettings);
-                              } else {
-                                alert('This folder is already excluded.');
-                              }
-                            }
-                          } catch (error) {
-                            console.error('Error selecting excluded folder:', error);
-                          }
-                        }}
-                        title="Exclude folder"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <small className="setting-help">Excluded folders will not be scanned for videos</small>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Content Organization</h3>
-                <div className="setting-item">
-                  <label htmlFor="custom-categories">Custom categories</label>
-                  <div className="custom-categories-list">
-                    {(settings.customCategories || []).map((category: any, index: number) => (
-                      <div key={index} className="category-item">
-                        <input 
-                          type="text" 
-                          value={category.name} 
-                          className="category-name-input"
-                          placeholder="Category name"
-                          onChange={(e) => {
-                            const currentCategories = settings.customCategories || [];
-                            const newCategories = [...currentCategories];
-                            newCategories[index] = { ...newCategories[index], name: e.target.value };
-                            setSettings({ ...settings, customCategories: newCategories });
-                          }}
-                        />
-                        <input 
-                          type="text" 
-                          value={category.pattern} 
-                          className="category-pattern-input"
-                          placeholder="File pattern (regex)"
-                          onChange={(e) => {
-                            const currentCategories = settings.customCategories || [];
-                            const newCategories = [...currentCategories];
-                            newCategories[index] = { ...newCategories[index], pattern: e.target.value };
-                            setSettings({ ...settings, customCategories: newCategories });
-                          }}
-                        />
-                        <button 
-                          type="button" 
-                          className="remove-category-btn"
-                          onClick={async () => {
-                            const currentCategories = settings.customCategories || [];
-                            const newCategories = currentCategories.filter((_: any, i: number) => i !== index);
-                            const updatedSettings = { ...settings, customCategories: newCategories };
-                            setSettings(updatedSettings);
-                            await saveSettings(updatedSettings);
-                          }}
-                          title="Remove category"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <div className="category-item add-new">
-                      <button 
-                        type="button" 
-                        className="add-category-btn"
-                        onClick={async () => {
-                          const currentCategories = settings.customCategories || [];
-                          const newCategory = { name: 'New Category', pattern: '' };
-                          const newCategories = [...currentCategories, newCategory];
-                          const updatedSettings = { ...settings, customCategories: newCategories };
-                          setSettings(updatedSettings);
-                          await saveSettings(updatedSettings);
-                        }}
-                        title="Add custom category"
-                      >
-                        + Add Category
-                      </button>
-                    </div>
-                  </div>
-                  <small className="setting-help">Create custom categories based on filename patterns (supports regex)</small>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="auto-tag-content">Auto-tag content</label>
-                  <input type="checkbox" id="auto-tag-content" defaultChecked={settings.autoTagContent || false} />
-                  <span className="setting-description">Automatically add tags based on content analysis</span>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="content-rating">Content rating filter</label>
-                  <select id="content-rating" defaultValue={settings.contentRating || "all"}>
-                    <option value="all">Show All Content</option>
-                    <option value="g">General Audience</option>
-                    <option value="pg">Parental Guidance</option>
-                    <option value="pg13">PG-13</option>
-                    <option value="r">Restricted</option>
-                  </select>
-                  <span className="setting-description">Filter content based on maturity rating</span>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Library</h3>
-                <div className="setting-item">
-                  <label htmlFor="auto-scan">Auto-scan on startup</label>
-                  <input type="checkbox" id="auto-scan" defaultChecked={settings.autoScan || false} />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="startup-folders">Startup folders</label>
-                  <div className="folders-list">
-                    {(settings.startupFolders || []).map((folder: string, index: number) => (
-                      <div key={index} className="folder-item">
-                        <input 
-                          type="text" 
-                          id={`folder-${index}`}
-                          value={folder} 
-                          readOnly
-                          className="folder-input"
-                          title={`Startup folder ${index + 1}: ${folder}`}
-                        />
-                        <button 
-                          type="button" 
-                          className="remove-folder-btn"
-                          onClick={async () => {
-                            const currentFolders = settings.startupFolders || [];
-                            const newFolders = currentFolders.filter((_: string, i: number) => i !== index);
-                            const updatedSettings = { ...settings, startupFolders: newFolders };
-                            setSettings(updatedSettings);
-                            await saveSettings(updatedSettings);
-                          }}
-                          title="Remove this folder"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <div className="folder-item">
-                      <input 
-                        type="text" 
-                        id="new-startup-folder" 
-                        placeholder="Select a folder to add..."
-                        readOnly
-                        className="folder-input"
-                        title="Click + to add a new startup folder"
-                      />
-                      <button 
-                        type="button" 
-                        className="add-folder-btn"
-                        onClick={async () => {
-                          try {
-                            const folderPath = await ipcRenderer.invoke('select-directory');
-                            if (folderPath) {
-                              const currentFolders = settings.startupFolders || [];
-                              const newFolders = [...currentFolders, folderPath];
-                              const updatedSettings = { ...settings, startupFolders: newFolders };
-                              setSettings(updatedSettings);
-                              await saveSettings(updatedSettings);
-                              const input = document.getElementById('new-startup-folder') as HTMLInputElement;
-                              if (input) {
-                                input.value = '';
-                              }
-                            }
-                          } catch (error) {
-                            console.error('Error selecting startup folder:', error);
-                          }
-                        }}
-                        title="Add folder"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <small className="setting-help">These folders will be automatically scanned when the app starts (if auto-scan is enabled)</small>
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="cache-thumbnails">Cache thumbnails</label>
-                  <input type="checkbox" id="cache-thumbnails" defaultChecked={settings.cacheThumbnails !== false} />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="default-view">Default view mode</label>
-                  <select id="default-view" defaultValue={settings.defaultView || "grid"}>
-                    <option value="grid">Grid</option>
-                    <option value="list">List</option>
-                    <option value="compact">Compact</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Disc Playback</h3>
-                <div className="setting-item">
-                  <label htmlFor="auto-convert">Auto-convert DVDs/Blu-rays</label>
-                  <input type="checkbox" id="auto-convert" defaultChecked={settings.autoConvert !== false} />
-                </div>
-                <div className="setting-item">
-                  <label htmlFor="conversion-quality">Conversion quality</label>
-                  <select id="conversion-quality" defaultValue={settings.conversionQuality || "medium"}>
-                    <option value="low">Low (Fast)</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High (Slow)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Cache Management</h3>
-                <div className="setting-item">
-                  <div>
-                    <label>Thumbnail Cache</label>
-                    <p className="cache-description">
-                      Thumbnails are automatically cached to improve performance. Clear cache to free up disk space.
-                    </p>
-                  </div>
-                  <button 
-                    className="secondary-btn clear-cache-btn"
-                    onClick={async () => {
-                      try {
-                        const success = await ipcRenderer.invoke('clear-thumbnail-cache');
-                        if (success) {
-                          alert('Thumbnail cache cleared successfully!');
-                        } else {
-                          alert('Failed to clear thumbnail cache.');
+                      onFocus={() => {
+                        console.log('Search input focused');
+                        if (searchTerm.length > 0) {
+                          const suggestions = generateSuggestions(searchTerm, videos);
+                          setSearchSuggestions(suggestions);
+                          setShowSuggestions(suggestions.length > 0);
                         }
-                      } catch (error) {
-                        console.error('Error clearing cache:', error);
-                        alert('Error clearing thumbnail cache.');
-                      }
-                    }}
+                      }}
+                      onBlur={() => {
+                        console.log('Search input blurred');
+                        // Delay hiding suggestions to allow clicking on them
+                        setTimeout(() => setShowSuggestions(false), 200);
+                      }}
+                      onClick={() => {
+                        console.log('Search input clicked');
+                      }}
+                      onMouseEnter={() => {
+                        console.log('Mouse entered search input');
+                      }}
+                      onMouseLeave={() => {
+                        console.log('Mouse left search input');
+                      }}
+                      onMouseDown={() => {
+                        console.log('Mouse down on search input');
+                      }}
+                      onMouseUp={() => {
+                        console.log('Mouse up on search input');
+                      }}
+                      tabIndex={0}
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={false}
+                      readOnly={false}
+                    />
+                    {showSuggestions && searchSuggestions.length > 0 && (
+                      <div className="search-suggestions">
+                        {searchSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="search-suggestion-item"
+                            onClick={() => {
+                              setSearchTerm(suggestion);
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="header-actions">
+                  <button 
+                    className="settings-btn"
+                    onClick={() => setCurrentPage('settings')}
+                    title={userProfile ? `${userProfile.name}'s Settings` : "Settings"}
                   >
-                    Clear Cache
+                    ⚙️
                   </button>
                 </div>
-              </div>
-            </div>
-
-            <div className="settings-footer">
-              <button className="secondary-btn" onClick={() => setShowSettings(false)}>
-                Cancel
-              </button>
-              <button 
-                className="primary-btn" 
-                onClick={() => {
-                  // Collect current form values and save
-                  const form = document.querySelector('.settings-content') as HTMLElement;
-                  if (form) {
-                    const newSettings: any = {};
-                    const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-                    checkboxes.forEach((cb: any) => {
-                      // Convert hyphenated IDs to camelCase
-                      const settingKey = cb.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
-                      newSettings[settingKey] = cb.checked;
-                      console.log(`Setting ${settingKey} (${cb.id}):`, cb.checked);
-                    });
-                    const selects = form.querySelectorAll('select');
-                    selects.forEach((sel: any) => {
-                      const settingKey = sel.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
-                      newSettings[settingKey] = sel.value;
-                    });
-                    const ranges = form.querySelectorAll('input[type="range"]');
-                    ranges.forEach((range: any) => {
-                      const settingKey = range.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
-                      newSettings[settingKey] = parseInt(range.value);
-                    });
-                    const inputs = form.querySelectorAll('input[type="text"], textarea');
-                    inputs.forEach((input: any) => {
-                      if (input.id === 'profile-name') {
-                        newSettings.userProfile = {
-                          ...newSettings.userProfile,
-                          name: input.value.trim(),
-                          onboardingComplete: true
-                        };
-                      } else if (input.id === 'profile-info') {
-                        newSettings.userProfile = {
-                          ...newSettings.userProfile,
-                          info: input.value.trim(),
-                          onboardingComplete: true
-                        };
-                      } else if (input.id === 'startup-folder') {
-                        // Legacy support - convert to startupFolders array
-                        if (input.value.trim()) {
-                          newSettings.startupFolders = [input.value.trim()];
-                        }
-                        console.log('Saving legacy startup folder:', input.value.trim());
-                      } else if (input.id === 'new-startup-folder') {
-                        // Skip the new folder input
-                      } else {
-                        // For other text inputs, convert to camelCase
-                        const settingKey = input.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
-                        newSettings[settingKey] = input.value.trim();
-                      }
-                    });
-                    
-                    // Handle folder inputs
-                    const folderInputs = form.querySelectorAll('input[id^="folder-"]');
-                    const folders = Array.from(folderInputs)
-                      .map(input => (input as HTMLInputElement).value.trim())
-                      .filter(value => value.length > 0);
-                    newSettings.startupFolders = folders;
-                    console.log('Saving startup folders:', folders);
-                    
-                    // Handle excluded folders
-                    const excludedFolderInputs = form.querySelectorAll('input[class*="excluded-folder-input"]');
-                    const excludedFolders = Array.from(excludedFolderInputs)
-                      .map(input => (input as HTMLInputElement).value.trim())
-                      .filter(value => value.length > 0);
-                    newSettings.excludedFolders = excludedFolders;
-                    console.log('Saving excluded folders:', excludedFolders);
-                    
-                    // Handle custom categories
-                    const categoryNameInputs = form.querySelectorAll('input[class*="category-name-input"]');
-                    const categoryPatternInputs = form.querySelectorAll('input[class*="category-pattern-input"]');
-                    const customCategories = [];
-                    for (let i = 0; i < categoryNameInputs.length; i++) {
-                      const nameInput = categoryNameInputs[i] as HTMLInputElement;
-                      const patternInput = categoryPatternInputs[i] as HTMLInputElement;
-                      if (nameInput.value.trim() && patternInput.value.trim()) {
-                        customCategories.push({
-                          name: nameInput.value.trim(),
-                          pattern: patternInput.value.trim()
-                        });
-                      }
-                    }
-                    newSettings.customCategories = customCategories;
-                    console.log('Saving custom categories:', customCategories);
-                    
-                    // Ensure startupFolders is always an array in the saved settings
-                    if (!newSettings.startupFolders) {
-                      newSettings.startupFolders = [];
-                    }
-                    
-                    saveSettings(newSettings);
-                    console.log('Final settings to save:', newSettings);
-                  }
-                  setShowSettings(false);
-                }}
-              >
-                Save Settings
-              </button>
-            </div>
+                <div className="window-controls">
+                  <button className="window-btn minimize-btn" onClick={minimizeWindow}>−</button>
+                  <button className="window-btn maximize-btn" onClick={maximizeWindow}>□</button>
+                  <button className="window-btn close-btn" onClick={closeWindow}>×</button>
+                </div>
+              </header>
+          <div className={`main-content ${selectedVideo ? 'with-video' : 'no-video'}`}>
+            {selectedVideo ? (
+              <Player
+                selectedVideo={selectedVideo}
+                videos={videos}
+                filteredVideos={filteredVideos}
+                userProfile={userProfile}
+                videoKey={videoKey}
+                onVideoSelect={playVideo}
+                onBackToLibrary={() => setSelectedVideo(null)}
+                onDeleteVideo={deleteVideo}
+                onShowInExplorer={showInExplorer}
+              />
+            ) : currentPage === 'settings' ? (
+              <SettingsPage
+                settings={settings}
+                setSettings={setSettings}
+                saveSettings={saveSettings}
+                userProfile={userProfile}
+                onBack={() => setCurrentPage('home')}
+              />
+            ) : settings.streamingMode ? (
+              <StreamingInterface 
+                videos={getPageFilteredVideos(currentPage)}
+                userProfile={userProfile}
+                onVideoSelect={playVideo}
+                settings={settings}
+                currentPage={currentPage}
+              />
+            ) : (
+              <Library
+                videos={videos}
+                filteredVideos={getPageFilteredVideos(currentPage)}
+                sortedVideos={getPageSortedVideos(currentPage)}
+                userProfile={userProfile}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                isLoading={isLoading}
+                searchTerm={searchTerm}
+                onVideoSelect={playVideo}
+                onOpenDisc={openDisc}
+                onSelectDirectory={selectDirectory}
+                onOpenSingleFile={openSingleFile}
+                onShowInExplorer={showInExplorer}
+                onDeleteVideo={deleteVideo}
+                setVideos={setVideos}
+                cardSize={settings.cardSize || 'medium'}
+                currentPage={currentPage}
+              />
+            )}
           </div>
-        </div>
-      )}
+
+          {/* Settings Panel */}
+          {showSettings && (
+            <SettingsPanel
+              settings={settings}
+              setSettings={setSettings}
+              saveSettings={saveSettings}
+              userProfile={userProfile}
+              onClose={() => setShowSettings(false)}
+            />
+          )}
+            </>
+          )}
         </>
       )}
     </div>

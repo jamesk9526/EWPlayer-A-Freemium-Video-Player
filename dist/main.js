@@ -43,6 +43,8 @@ const os = __importStar(require("os"));
 const child_process_1 = require("child_process");
 const fluent_ffmpeg_1 = __importDefault(require("fluent-ffmpeg"));
 const ffmpeg_static_1 = __importDefault(require("ffmpeg-static"));
+const contextMenu_1 = require("./contextMenu");
+const multiPlayerWindow_1 = require("./multiPlayerWindow");
 if (ffmpeg_static_1.default) {
     fluent_ffmpeg_1.default.setFfmpegPath(ffmpeg_static_1.default);
 }
@@ -115,6 +117,8 @@ function createWindow() {
     mainWindow.webContents.on('context-menu', (event, params) => {
         contextMenu.popup();
     });
+    // Register custom Tools submenu for Multi-Player
+    (0, contextMenu_1.registerContextMenu)(mainWindow, (payload) => (0, multiPlayerWindow_1.createMultiPlayerWindow)(payload));
     if (isDev) {
         mainWindow.loadURL('http://localhost:3000');
     }

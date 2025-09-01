@@ -5,6 +5,8 @@ import * as os from 'os';
 import { execFile, exec } from 'child_process';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
+import { registerContextMenu } from './contextMenu';
+import { createMultiPlayerWindow } from './multiPlayerWindow';
 
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic as string);
@@ -83,6 +85,9 @@ function createWindow() {
   mainWindow.webContents.on('context-menu', (event, params) => {
     contextMenu.popup();
   });
+
+  // Register custom Tools submenu for Multi-Player
+  registerContextMenu(mainWindow, (payload?: { initialVideoId?: string }) => createMultiPlayerWindow(payload));
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
