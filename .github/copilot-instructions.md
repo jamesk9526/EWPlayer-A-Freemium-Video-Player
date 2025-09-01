@@ -1,245 +1,400 @@
-Goals
 
-Get to a video (or a set of videos) in 1–2 clicks.
 
-Keep the player focused; push management tasks to drawers/menus.
+* Global dark shell with logo, search, settings.
+* Hero/banner with title + Play / More Info.
+* Rows for Movies, TV Shows, Home Videos (cards w/ year).
+* Series page with blurred backdrop + “Episodes” grid.
+* Player page with a large video pane and a right “Up Next” rail.
 
-Make batch work (tag, move, delete) painless.
+# What we’re changing (target style)
 
-Be great with mouse, keyboard, and touch.
+* Add **rail-based home** (billboard + “Continue Watching” + editorial rows).
+* **Card-first** design with unified sizing, progress bars, quick actions on hover/focus.
+* **Details view** with tabs (About | Episodes | Extras | More Like This).
+* **Player overlay**: big transport controls, next-up countdown, A/V & captions menu, skip-intro.
+* **TV/keyboard** friendly focus rings + scroll-snap carousels.
+* Clean **theming tokens** so everything feels cohesive.
 
-Information architecture
+---
 
-Global header
+# Component-by-component upgrade map
 
-App logo + quick upload
+## 1) App shell & top nav
 
-Command/Search (type-to-filter with keyboard shortcuts)
+**Do**
 
-View toggle (Grid / List / Compact)
+* Add primary nav: **Home • TV • Movies • My List** (Kids optional). Keep Search on the right, Profile menu next to it.
+* Make the header **translucent** and turn solid after scroll (`backdrop-blur` + gradient).
 
-Sort menu (Recent, Added date, Duration, Name, Most played)
+**Key styles**
 
-“Saved views” dropdown (e.g., All 1080p, Recently Added, Needs Tags)
+* `header` uses sticky + gradient: `sticky top-0 bg-gradient-to-b from-black/70 to-transparent`
+* Focus rings for D-pad/keyboard: `focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400`.
 
-Left rail (collapsible)
+---
 
-Library
+## 2) Billboard / hero (home top)
 
-All videos
+**Do**
 
-Favorites ★
+* Use the selected title’s **backdrop video** (muted, autoplay on focus) or image with a bottom gradient.
+* Actions: **Play**, **More Info**, **Add to List**. Underline a short logline, show year + rating + runtime badges.
 
-Watch Later
+**Tech**
 
-Recently Added / Recently Played
+* Lazy mount the trailer after 600–800ms “settle” time to avoid CPU spikes.
+* Preload next billboard artwork via `<link rel="preload" as="image">`.
 
-Playlists & Collections
+---
 
-Folders (source locations)
+## 3) Rows → virtualized, snap, accessible
 
-Trash
+**Do**
 
-Filters (faceted)
+* Convert your rows to **horizontal carousels** with **scroll-snap** and/or arrows.
+* First row is **Continue Watching** (with progress).
+* Follow with **Trending, Because You Watched X, Recently Added**.
 
-Duration (short/med/long) slider
+**Tech**
 
-Resolution (4K/1080/720), FPS, Aspect
+* Virtualize with `react-window` or your own visibility observer to keep FPS smooth when you reach 1000+ items.
+* Each row gets an ARIA label: `role="region" aria-labelledby="row-heading-id"`.
 
-Type (mp4, mov), Orientation
+---
 
-Tags (multi-select)
+## 4) Title cards (unify)
 
-Has captions / chapters / notes
+**Do**
 
-Source (import feed, camera, folder)
+* Single **aspect ratio** (e.g., 2:3 poster for TV/Movie, 16:9 for episodes).
+* On **hover/focus**: slight scale, show quick actions (**▶ Play**, **ℹ More**, **＋ List**), show a tiny **progress bar**.
+* Badges: `UHD/HDR/Atmos`, `NEW`, `4K`.
 
-Main content
+**Styles**
 
-Virtualized Grid or List of cards
+* Card: rounded-xl, shadow-md, `overflow-hidden`, gradient mask on bottom for title legibility.
+* Progress: a 2–3px bar using `linear-gradient` or a simple div.
 
-Sticky Bulk toolbar appears when items are selected
+---
 
-Pagination/infinite scroll with clear count: “214 results”
+## 5) Details view (modal or page)
 
-Right rail (context drawer)
+**Do**
 
-Tabs: Details | Chapters | Transcript | Versions
+* **Hero**: wide backdrop, title + Resume/Play + Add.
+* **Metadata** (year • rating • runtime • audio/subs chips).
+* **Tabs**: **About | Episodes | Extras | More Like This**.
+* **Episodes**: season switcher (left) + episode grid/list (right) with per-episode progress and a “▶ Resume” on the current one.
 
-Shows metadata for the current selection or hovered item
+---
 
-Remains available in both Library and Player
+## 6) Player page (biggest UX win)
 
-Library layout & card design
+**Do**
 
-Card (16:9, responsive)
+* **Overlay controls** that fade in/out: big Play/Pause, robust scrub bar with thumbnails, time elapsed/remaining.
+* **Next Up**: 5–7s countdown in the lower-right; right rail collapses into an icon button.
+* **Skip Intro** button when `hasIntro` flag is true.
+* **A/V menu**: Audio track, Subtitles, Quality/Auto; **Playback speed**.
+* Keyboard: `Space/P` toggle, `←/→` seek 10s, `↑/↓` volume, `F` fullscreen, `M` mute.
 
-Thumbnail with hover-scrub preview
+**Fix the right-rail overflow**
+
+* Make the page a **12-col grid** with a fixed rail and overflow scroll:
+
+  * parent: `grid grid-cols-12 gap-6`
+  * video area: `col-span-9`
+  * rail: `col-span-3 sticky top-16 max-h-[calc(100dvh-6rem)] overflow-y-auto`
+    No absolute positioning on rail; give it `box-border p-3` so thumbnails never spill.
+
+---
+
+## 7) Search & filters
+
+**Do**
+
+* Instant results, grouped by **Titles**, **People**, **Genres**.
+* Optional filters sheet: Year, Resolution, Audio, Unwatched.
+
+---
+
+## 8) Accessibility & performance
+
+* **Focus rings** everywhere; no hidden traps.
+* **Skeleton loaders** for rows.
+* Use **srcset** & **LQIP** for posters; defer billboard video.
+* Preload details on **focus** (not just click) for snappy modals.
+
+---
+
+# Design tokens (Tailwind-friendly)
+
+```ts
+// tailwind.config.js excerpt
+theme: {
+  extend: {
+    colors: {
+      surface: {
+        900: '#0b0b0d', 800: '#141418', 700: '#1b1b21', 600: '#23232b'
+      },
+      brand: { DEFAULT: '#ff4d16' },
+    },
+    boxShadow: { card: '0 6px 20px rgba(0,0,0,.35)' },
+    borderRadius: { xl: '14px', '2xl': '18px' },
+    transitionTimingFunction: { pleasant: 'cubic-bezier(.2,.8,.2,1)' },
+  }
+}
+```
+
+---
+
+# Reference React snippets (concise & correct)
+
+## Row with scroll-snap + keyboard nav
+
+```tsx
+// components/Row.tsx
+import { useRef } from 'react';
+
+export default function Row({ title, items }: { title: string; items: any[] }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const scrollByCard = (dir: 1 | -1) => {
+    const el = scroller.current!;
+    const w = el.firstElementChild?.clientWidth ?? 280;
+    el.scrollBy({ left: dir * (w + 16) * 5, behavior: 'smooth' });
+  };
+
+  return (
+    <section className="my-8" aria-label={title}>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 id={`${title}-h`} className="text-xl font-semibold">{title}</h2>
+        <div className="space-x-2">
+          <button className="btn" onClick={() => scrollByCard(-1)} aria-label="Scroll left">‹</button>
+          <button className="btn" onClick={() => scrollByCard(1)} aria-label="Scroll right">›</button>
+        </div>
+      </div>
+
+      <div
+        ref={scroller}
+        className="flex gap-4 overflow-x-auto snap-x snap-mandatory px-1 pb-2"
+        role="list"
+      >
+        {items.map((it) => (
+          <article key={it.id} role="listitem" className="snap-start">
+            <TitleCard item={it} />
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+```
+
+## Title card with quick actions + progress
+
+```tsx
+// components/TitleCard.tsx
+import { useState } from 'react';
+
+export default function TitleCard({ item }: { item: any }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      className="group relative w-[220px] shrink-0 rounded-xl bg-surface-700 shadow-card overflow-hidden"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      tabIndex={0}
+    >
+      <img src={item.poster} alt={item.name} className="h-[330px] w-full object-cover" />
+      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/10 to-transparent">
+        <p className="line-clamp-2 text-sm font-semibold">{item.name}</p>
+        <p className="text-xs opacity-70">{item.year}</p>
+      </div>
+
+      {/* quick actions */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition duration-150 ease-pleasant group-hover:opacity-100">
+        <div className="pointer-events-auto flex gap-2">
+          <button className="rounded-full bg-white/95 px-4 py-2 text-black font-medium">▶ Play</button>
+          <button className="rounded-full bg-surface-800/90 px-4 py-2">More Info</button>
+          <button className="rounded-full bg-surface-800/90 px-4 py-2">＋</button>
+        </div>
+      </div>
+
+      {/* progress */}
+      {item.progressPct > 0 && (
+        <div className="absolute left-0 right-0 bottom-0 h-1 bg-white/10">
+          <div style={{ width: `${item.progressPct}%` }} className="h-full bg-brand" />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Player layout with sticky right rail
+
+```tsx
+// pages/watch/[id].tsx
+export default function Watch({ video, upNext }: { video: any; upNext: any[] }) {
+  return (
+    <div className="mx-auto max-w-[1400px] px-6 py-6 grid grid-cols-12 gap-6">
+      <div className="col-span-12 lg:col-span-9">
+        <VideoPlayer src={video.src} thumbnails={video.thumbVtt} />
+        <h1 className="mt-4 text-2xl font-semibold">{video.title}</h1>
+        <p className="text-sm opacity-70">{video.meta}</p>
+      </div>
+
+      <aside className="hidden lg:block col-span-3 sticky top-16 max-h-[calc(100dvh-6rem)] overflow-y-auto">
+        <h3 className="mb-3 text-lg font-semibold">Up Next</h3>
+        <ul className="space-y-3">
+          {upNext.map(v => (
+            <li key={v.id} className="rounded-xl bg-surface-700 p-2 hover:bg-surface-600 transition">
+              <div className="flex gap-3">
+                <img src={v.thumb} alt="" className="h-16 w-28 object-cover rounded-md" />
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-medium">{v.title}</p>
+                  <p className="text-xs opacity-60">{v.meta}</p>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </div>
+  );
+}
+```
+
+---
+
+# Data model nudge (to power UX)
+
+* `Title{ id, type, name, synopsis, year, rating, genres[], images{poster,backdrop}, badges{uhd,hdr,atmos} }`
+* `Episode{ id, s, e, runtime, hasIntro, images{still}, progress{position,percent} }`
+* `Progress{ titleId, position, percent, lastSeen }`
+* `Profile{ id, name, maturityLevel, settings{captions, playbackSpeed} }`
+
+---
+
+# “Do this next” checklist (short sprint)
+
+1. Create **design tokens** + Tailwind config (above).
+2. Replace current rows with `Row + TitleCard` components; add **Continue Watching** row.
+3. Implement **DetailsModal** with tabs & related rows.
+4. Swap Player page to **grid + sticky rail**; add overlay controls & next-up countdown.
+5. Add **Focus states & keyboard** handlers.
+6. Add **skeletons** and **image LQIP**.
+7. Wire `hasIntro` to show **Skip Intro**.
+
+---
+
+# Prompts you can paste into Copilot
+
+### 1) Create Row + TitleCard
+
+```
+You are editing a React + Tailwind project.
+
+Goal: Replace our existing content rows with a Netflix-like carousel and unified title card.
+
+Create two components:
+- components/Row.tsx: horizontal scroller with scroll-snap, left/right buttons that scroll by ~5 cards. Accessible region with aria-label from props.title.
+- components/TitleCard.tsx: 220x330 poster card (rounded-xl, shadow), gradient footer with name/year, three quick actions shown on hover/focus (Play, More Info, Add), and an optional 2px progress bar at the bottom when props.item.progressPct > 0. Include keyboard focus ring and Enter to Play.
+
+Constraints:
+- No external carousel libs.
+- Use Tailwind classes only.
+- Keep components pure; actions come via onPlay/onMore/onAdd props.
+- Provide minimal unit tests for utility helpers if any.
+```
+
+### 2) Details view with tabs
+
+```
+Add a DetailsModal component with:
+- Hero area (backdrop image, title, Resume/Play/Add buttons).
+- Metadata chips for year, rating, runtime, and available audio/subs.
+- Tabs: About | Episodes | Extras | More Like This.
+- Episodes tab: left Season selector, right Episode list with per-episode progress and "Resume" on the current episode.
+
+Style: dark, rounded-2xl, max-w-5xl, responsive.
+Hook: expose <DetailsModal open titleId onClose /> and fetch details on mount.
+```
+
+### 3) Player overlay + next-up + sticky rail
+
+```
+Refactor watch page to a 12-col grid:
+- Video area col-span-9 (lg+), Up Next rail col-span-3 (sticky top-16, max-h calc(100dvh - 6rem), overflow-y-auto).
+Overlay controls:
+- Big centered Play/Pause toggle, bottom scrub bar with thumbnail preview (given VTT), time elapsed/remaining, volume, captions menu, settings (playback speed 0.5–2x).
+- If video.hasIntro=true and currentTime within introWindow show "Skip Intro" button that seeks to item.introEnd.
+- Next episode countdown: when remaining < 8s show a pill in bottom-right; hitting it loads next.
+
+Keyboard:
+Space/P pause, arrows ±10s seek, up/down volume, F fullscreen, M mute, C captions.
+
+Keep styles with Tailwind. No external player lib changes.
+```
+
+### 4) Accessibility & skeletons
+
+```
+Add focus-visible outlines on all interactive elements with Tailwind.
+Add skeleton loaders for rows and details modal using gray animated blocks.
+Optimize images with width/height attributes and LQIP placeholders; fade real image in onload.
+```
+
+---
+
+# Prompts you can paste into Claude Sonnet 4 (more verbose, step-wise)
+
+### 1) Architecture & file plan
+
+```
+You are Claude Sonnet 4. Create a step-by-step plan to transform an existing React + Tailwind video library UI into a Netflix/Plex-style interface.
+
+Deliver:
+1) A file tree listing for new/changed files.
+2) For each file, a bullet list of responsibilities and props/events.
+3) Tailwind utility classes and CSS tokens to introduce (colors, radii, shadows).
+4) A risks & mitigations section (performance with 1000+ items, keyboard focus traps, thumbnail VTT handling, autoplay constraints on Safari).
+
+Assume components: AppShell, TopNav, Billboard, Row, TitleCard, DetailsModal, VideoPlayer, UpNextRail.
+```
+
+### 2) Implement the Row + TitleCard components
+
+```
+Write production-ready code for components/Row.tsx and components/TitleCard.tsx with:
+- scroll-snap horizontal carousel, arrow buttons, and accessible roles/labels.
+- Hover/focus animated quick actions and a progress bar.
+- Prop-driven callbacks: onPlay(item), onMore(item), onAdd(item).
+- Unit test stubs for key helpers (calculate scroll step).
+Return complete TypeScript code blocks only.
+```
+
+### 3) Watch page refactor with sticky Up Next and overlay controls
+
+```
+Produce a new pages/watch/[id].tsx and components/PlayerOverlay.tsx:
+- 12-col grid, sticky right rail, overflow-y-auto.
+- Overlay controls including Skip Intro window and Next Up countdown.
+- Keyboard controls and ARIA labels.
+Keep code self-contained and Tailwind-only.
+```
+
+### 4) Details modal with tabs & episodes
+
+```
+Return a complete DetailsModal.tsx implementing About | Episodes | Extras | More Like This tabs, with a Season selector and an Episode list showing progress and a Resume action. Include responsive layout and motion animations. Keep to Tailwind.
+```
+
+---
+
+# Extra polish (small but pro)
+
+* **Row headers** show a subtle “View All” link on the right.
+* **Context menu** on cards: “Play from beginning”, “More like this”, “Mark watched”.
+* **Editorial hubs**: simple JSON config to pin curated rows on Home.
+* **Analytics hooks**: impression/click events on TitleCard; completion / skip-intro metrics.
 
-Top-left: file-type chip (MP4) only on hover; keep always-on minimal
-
-Bottom gradient with:
-
-Title (editable inline on click)
-
-Duration • Resolution • FPS
-
-Progress bar (watched %) on bottom edge
-
-Quick actions (appear on hover; never as big primary buttons):
-
-▶ Play • ♥ Favorite • ⠇ More (context menu)
-
-Context menu (right-click or ⠇):
-
-Add to queue / playlist
-
-Rename
-
-Edit metadata (opens right drawer)
-
-Show in folder
-
-Replace source / Re-upload
-
-Download
-
-Delete (with confirm)
-
-Selection mode: checkmark in top-right corner (Shift-click range select)
-
-List view
-
-Compact rows with leading thumbnail, title, duration, date added, tags, watched %, and kebab menu. Columns are configurable and sticky-header sortable.
-
-Empty & error states
-
-Dropzone for drag-and-drop upload with recent folders
-
-Clear messaging for “No results. Try removing filters.”
-
-Player layout (Theater-first)
-
-Top
-
-Collapsible global header (auto-hide when playing)
-
-Breadcrumb: Library › Playlist/Collection › Video
-
-Main
-
-Video area centered, responsive “theater” width
-
-Transport controls:
-
-Play/Pause, Time, Seek bar with chapter markers and thumbnail previews
-
-Volume, Speed, Captions/Audio tracks, Loop segment, PiP, Theater, Fullscreen
-
-Right sidebar (Queue) — collapsible:
-
-“Up Next” (drag to reorder)
-
-Queue controls: Shuffle, Repeat one/all, Clear, Save as playlist
-
-Search to add more videos without leaving the player
-
-Below the player
-
-Title (editable), Favorite, Tags
-
-Primary actions: Add to playlist, Share link, Download (if allowed)
-
-Secondary: Show in folder, Replace file, View stats (bitrate, codec, resolution)
-
-Tabs: Description | Chapters | Transcript (searchable, click-to-seek) | Notes
-
-Comment/Annotations (optional, private notes per video)
-
-Keyboard shortcuts
-
-Space: play/pause • J/K/L: -10s / pause / +10s
-
-←/→: ±5s • ↑/↓: volume • M: mute • F: fullscreen
-
-T: theater • C: captions • ,/. : frame step (paused)
-
-N/P: next/previous in queue • /: focus search
-
-Mini-player
-
-When navigating the library mid-playback, a dockable mini-player sticks to the bottom so playback never stops.
-
-Batch work & power features
-
-Bulk toolbar (appears on select): Add to playlist • Tag • Move • Delete • Export CSV
-
-“Select all in results” (affects all pages)
-
-Smart collections (auto-updating saved queries): e.g., “Unwatched 4K under 10 min”
-
-Jobs & notifications tray: background imports, transcodes, caption generation progress
-
-Metadata templates (apply common tags/fields to many files)
-
-Accessibility & polish
-
-Real focus states, full keyboard navigation, ARIA roles
-
-Caption styling (font size, background), high-contrast theme toggle
-
-Motion-reduced mode (no hover auto-scrub if “prefers-reduced-motion”)
-
-Tooltips with delays; all icons have labels
-
-Virtualized lists for large libraries; prefetch hovered thumbnails
-
-Consistent spacing (8pt system), 12–14px paddings, 12–16px radius on cards
-
-Quick wins vs. your current screens
-
-Replace big “Play/Show in folder/Delete” buttons on each card with a subtle hover toolbar + kebab menu to reduce visual noise.
-
-Move “Up Next” into a collapsible right Queue with drag-and-drop and “Save as playlist”.
-
-Add hover-scrub + watched progress to card thumbnails.
-
-Introduce faceted filters in a left rail instead of hiding power search in the header only.
-
-Use a details drawer (right rail) for metadata/chapter editing so you don’t navigate away.
-
-Keep a mini-player when leaving the Player page to browse.
-
-Replace bottom “Previous/Next” buttons with keyboard shortcuts and Queue controls.
-
-Promote Rename and Add to playlist to first-class actions; demote “Show in folder”.
-
-Suggested layout grid (high level)
-
-App shell: CSS Grid – grid-template-columns: [rail] 260px [content] 1fr [context] 360px;
-
-Collapsed rails at ≤ 1200px, “context” becomes a drawer.
-
-Player uses a variant: grid-template-columns: 1fr 360px with the header floating.
-
-“Definition of Done” checklist
-
- Library supports grid/list/compact with saved views
-
- Faceted filters + tags + quick search work together
-
- Cards: hover-scrub, watched bar, kebab menu, inline rename
-
- Bulk selection with sticky toolbar
-
- Player: chapters on scrub bar, transcript search, captions menu
-
- Queue: draggable, shuffle/repeat, save as playlist
-
- Mini-player persists across navigation
-
- Keyboard shortcuts + help overlay (“?”)
-
- Accessible focus order, ARIA, caption styling
-
- Virtualized lists for 1k+ items, smooth scrolling

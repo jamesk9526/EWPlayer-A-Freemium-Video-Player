@@ -64,16 +64,16 @@ else {
                 mainWindow.restore();
             mainWindow.focus();
             // Handle file opened from command line in second instance
-            const filePath = commandLine.find(arg => arg.endsWith('.mp4') || arg.endsWith('.avi') ||
-                arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
+            const filePath = commandLine.find(arg => arg.endsWith('.mp4') || arg.endsWith('.mkv') ||
+                arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
             if (filePath && fs.existsSync(filePath)) {
                 mainWindow.webContents.send('open-file', filePath);
             }
         }
     });
     // Handle file opened from command line on first instance
-    const filePath = process.argv.find(arg => arg.endsWith('.mp4') || arg.endsWith('.avi') ||
-        arg.endsWith('.mkv') || arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
+    const filePath = process.argv.find(arg => arg.endsWith('.mp4') || arg.endsWith('.mkv') ||
+        arg.endsWith('.mov') || arg.endsWith('.wmv') || arg.endsWith('.flv') || arg.endsWith('.m2ts'));
     if (filePath && fs.existsSync(filePath)) {
         fileToOpen = filePath;
     }
@@ -237,7 +237,7 @@ electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
         const normalized = /:\/$/.test(root) ? root : (root.endsWith('/') ? root : root + '/');
         const videoTs = path.join(normalized, 'VIDEO_TS');
         const bdmv = path.join(normalized, 'BDMV');
-        const supportedExt = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'];
+        const supportedExt = ['.mp4', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'];
         if (fs.existsSync(videoTs) && fs.statSync(videoTs).isDirectory()) {
             // DVD-Video detected; select VTS with largest total size
             const files = fs.readdirSync(videoTs).filter(f => /\.VOB$/i.test(f));
@@ -409,7 +409,7 @@ electron_1.ipcMain.handle('open-file-dialog', async () => {
         filters: [
             {
                 name: 'Video Files',
-                extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'm2ts']
+                extensions: ['mp4', 'mkv', 'mov', 'wmv', 'flv', 'm2ts']
             }
         ]
     });
@@ -458,7 +458,7 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
                 }
                 else {
                     const ext = path.extname(file).toLowerCase();
-                    if (['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'].includes(ext)) {
+                    if (['.mp4', '.mkv', '.mov', '.wmv', '.flv', '.m2ts'].includes(ext)) {
                         const thumbsDir = path.join(electron_1.app.getPath('userData'), 'thumbnails');
                         try {
                             fs.mkdirSync(thumbsDir, { recursive: true });
