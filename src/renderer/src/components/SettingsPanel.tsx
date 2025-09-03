@@ -409,17 +409,32 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   </button>
                 </div>
               </div>
-              <small className="setting-help">These folders will be automatically scanned when the app starts (if auto-scan is enabled)</small>
+              <small className="setting-help">These folders will be automatically scanned when the app starts</small>
             </div>
             <div className="setting-item">
-              <label htmlFor="cache-thumbnails">Cache thumbnails</label>
-              <input type="checkbox" id="cache-thumbnails" defaultChecked={settings.cacheThumbnails !== false} />
+              <label htmlFor="thumbnail-percentage">Thumbnail position (%)</label>
+              <div className="range-container">
+                <input
+                  type="range"
+                  id="thumbnail-percentage"
+                  min="10"
+                  max="90"
+                  step="5"
+                  value={settings.thumbnailPercentage || 50}
+                  onChange={(e) => {
+                    const newValue = parseInt(e.target.value);
+                    setSettings({ ...settings, thumbnailPercentage: newValue });
+                  }}
+                  title={`Current: ${settings.thumbnailPercentage || 50}%`}
+                />
+                <span className="range-value">{settings.thumbnailPercentage || 50}%</span>
+              </div>
+              <span className="setting-description">Position in video to capture thumbnail (10-90%)</span>
             </div>
             <div className="setting-item">
               <label htmlFor="default-view">Default view mode</label>
               <select id="default-view" defaultValue={settings.defaultView || "grid"}>
                 <option value="grid">Grid</option>
-                <option value="list">List</option>
                 <option value="compact">Compact</option>
               </select>
             </div>
@@ -430,7 +445,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div className="setting-item">
               <label htmlFor="theater-mode">Enable Theater Mode</label>
               <input type="checkbox" id="theater-mode" defaultChecked={settings.theaterMode || false} />
-              <span className="setting-description">Switch to Netflix-style interface with content categorization</span>
+              <span className="setting-description">Switch to ewplayer-style interface with content categorization</span>
             </div>
             <div className="setting-item">
               <label htmlFor="theater-cover-style">Cover Style</label>

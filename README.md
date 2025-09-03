@@ -6,7 +6,7 @@
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0-blue.svg)](https://www.typescriptlang.org/)
 
-EwPlayer is a modern, native Windows video player built with Electron, React, and TypeScript. It provides a Netflix-style interface for organizing and playing your video library with advanced features like automatic content detection, multi-player support, and comprehensive library management.
+EwPlayer is a modern, native Windows video player built with Electron, React, and TypeScript. It provides a ewplayer-style interface for organizing and playing your video library with advanced features like automatic content detection, multi-player support, and comprehensive library management.
 
 ![EwPlayer Screenshot](https://via.placeholder.com/800x450/1a1a1a/ffffff?text=EwPlayer+Interface)
 
@@ -26,7 +26,7 @@ EwPlayer is a modern, native Windows video player built with Electron, React, an
 - **Organized Categories**: Separate views for Movies, TV Shows, and Home Videos
 
 ### 🎭 Theater Interface
-- **Netflix-Style UI**: Modern, cinematic browsing experience
+- **ewplayer-Style UI**: Modern, cinematic browsing experience
 - **Content Rows**: Organized by genre, continue watching, and recommendations
 - **Hero Banners**: Featured content with play buttons
 - **Responsive Design**: Adapts to different window sizes

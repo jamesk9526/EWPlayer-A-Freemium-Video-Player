@@ -42,7 +42,24 @@ const fs = __importStar(require("fs"));
 const fluent_ffmpeg_1 = __importDefault(require("fluent-ffmpeg"));
 const ffmpeg_static_1 = __importDefault(require("ffmpeg-static"));
 if (ffmpeg_static_1.default) {
-    fluent_ffmpeg_1.default.setFfmpegPath(ffmpeg_static_1.default);
+    // Handle both development and production paths
+    let ffmpegPath = ffmpeg_static_1.default;
+    // In packaged app, ffmpeg-static is unpacked to .asar.unpacked
+    if (electron_1.app.isPackaged) {
+        const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+        if (fs.existsSync(unpackedPath)) {
+            ffmpegPath = unpackedPath;
+        }
+        else {
+            // Fallback: try the original path (might work if asarUnpack worked differently)
+            const asarPath = path.join(process.resourcesPath, 'app.asar', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+            if (fs.existsSync(asarPath)) {
+                ffmpegPath = asarPath;
+            }
+        }
+    }
+    fluent_ffmpeg_1.default.setFfmpegPath(ffmpegPath);
+    console.log('FFmpeg path set to:', ffmpegPath);
 }
 else {
     console.warn('ffmpeg-static not found; relying on system ffmpeg in PATH');
@@ -88,7 +105,7 @@ electron_1.ipcMain.handle('get-file-info', async (event, filePath) => {
         return null;
     }
 });
-electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
+electron_1.ipcMain.handle('scan-videos', async (event, dirPath, options) => {
     console.log('Main process: scan-videos called with dirPath:', dirPath);
     // Check if directory exists
     if (!fs.existsSync(dirPath)) {
@@ -157,8 +174,11 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
                             return;
                         }
                         const duration = ((_a = metadata.format) === null || _a === void 0 ? void 0 : _a.duration) || 0;
-                        const midPoint = Math.floor(duration / 2); // 50% of video duration
-                        const timemarkSeconds = midPoint > 0 ? midPoint : 20; // Fallback to 1 second if duration can't be determined
+                        const thumbnailPercentage = (options === null || options === void 0 ? void 0 : options.thumbnailPercentage) || 50;
+                        const thumbnailJitter = (options === null || options === void 0 ? void 0 : options.thumbnailJitter) || 0;
+                        const percentagePoint = Math.floor((duration * thumbnailPercentage) / 100);
+                        const jitterOffset = thumbnailJitter > 0 ? Math.floor(Math.random() * thumbnailJitter) : 0;
+                        const timemarkSeconds = Math.max(1, Math.min(duration - 1, percentagePoint + jitterOffset)); // Ensure within bounds
                         (0, fluent_ffmpeg_1.default)(video.path)
                             .screenshots({
                             count: 1,
@@ -168,7 +188,7 @@ electron_1.ipcMain.handle('scan-videos', async (event, dirPath) => {
                             size: '320x180'
                         })
                             .on('end', () => {
-                            console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (50% of ${duration}s)`);
+                            console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (${thumbnailPercentage}% + ${jitterOffset}s jitter of ${duration}s)`);
                             resolve(true);
                         })
                             .on('error', (err) => {

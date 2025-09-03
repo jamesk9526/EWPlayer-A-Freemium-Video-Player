@@ -107,6 +107,14 @@ function createWindow() {
     });
     // Register custom Tools submenu for Multi-Player
     (0, contextMenu_1.registerContextMenu)(mainWindow, (payload) => (0, multiPlayerWindow_1.createMultiPlayerWindow)(payload));
+    // Handle F12 to open developer tools
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'F12' && !input.control && !input.alt && !input.meta && !input.shift) {
+            console.log('F12 pressed in main window - opening dev tools');
+            event.preventDefault();
+            mainWindow.webContents.toggleDevTools();
+        }
+    });
     if (isDev) {
         mainWindow.loadURL('http://localhost:3000');
     }

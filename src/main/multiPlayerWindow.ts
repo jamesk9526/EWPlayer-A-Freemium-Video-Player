@@ -33,6 +33,15 @@ export function createMultiPlayerWindow(payload?: { initialVideoId?: string }) {
 
   multiPlayerWin.loadURL(url);
 
+  // Handle F12 to open developer tools
+  multiPlayerWin.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && !input.control && !input.alt && !input.meta && !input.shift) {
+      console.log('F12 pressed in multi-player window - opening dev tools');
+      event.preventDefault();
+      multiPlayerWin!.webContents.toggleDevTools();
+    }
+  });
+
   multiPlayerWin.once('ready-to-show', () => {
     multiPlayerWin?.show();
     if (payload?.initialVideoId) {

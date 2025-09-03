@@ -226,7 +226,7 @@ electron_1.ipcMain.handle('scan-disc', async (event, driveRoot) => {
     }
 });
 // Convert a disc title (list of VOB or M2TS files) to an MP4 we can play (H.264/AAC)
-electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
+async function convertDiscTitle(filePaths) {
     if (!Array.isArray(filePaths) || filePaths.length === 0)
         return null;
     try {
@@ -237,9 +237,16 @@ electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
         catch (_a) { }
         const listFile = path.join(cacheDir, `concat-${Date.now()}.txt`);
         const outFile = path.join(cacheDir, `disc-${Date.now()}.mp4`);
-        // Write concat list
-        const listContent = filePaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join(os.EOL);
+        // Write concat list - properly format paths for Windows
+        const listContent = filePaths.map(p => {
+            // Convert backslashes to forward slashes and escape for FFmpeg concat
+            const normalizedPath = p.replace(/\\/g, '/');
+            return `file '${normalizedPath}'`;
+        }).join(os.EOL);
         fs.writeFileSync(listFile, listContent, 'utf8');
+        // Debug: log the concat file content
+        console.log('Concat file content:', listContent);
+        console.log('Concat file path:', listFile);
         // Use fluent-ffmpeg to run the conversion
         const result = await new Promise((resolve, reject) => {
             (0, fluent_ffmpeg_1.default)()
@@ -247,14 +254,13 @@ electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
                 .inputFormat('concat')
                 .inputOptions(['-safe 0'])
                 .outputOptions([
-                '-map 0:v:0',
-                '-map 0:a:0?',
                 '-c:v libx264',
                 '-preset veryfast',
                 '-crf 22',
                 '-c:a aac',
                 '-b:a 192k',
-                '-movflags +faststart'
+                '-movflags +faststart',
+                '-avoid_negative_ts make_zero'
             ])
                 .on('start', cmd => console.log('FFmpeg start:', cmd))
                 .on('error', (err) => {
@@ -277,4 +283,11 @@ electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
         console.error('convert-disc-title error', e);
         return null;
     }
+}
+electron_1.ipcMain.handle('convert-disc-title', async (event, filePaths) => {
+    return convertDiscTitle(filePaths);
+});
+// Alias handler for convert-dvd-title (used by renderer)
+electron_1.ipcMain.handle('convert-dvd-title', async (event, filePaths) => {
+    return convertDiscTitle(filePaths);
 });

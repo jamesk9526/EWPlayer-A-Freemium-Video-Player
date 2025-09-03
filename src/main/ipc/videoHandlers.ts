@@ -5,7 +5,25 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
 
 if (ffmpegStatic) {
-  ffmpeg.setFfmpegPath(ffmpegStatic as string);
+  // Handle both development and production paths
+  let ffmpegPath = ffmpegStatic as string;
+  
+  // In packaged app, ffmpeg-static is unpacked to .asar.unpacked
+  if (app.isPackaged) {
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+    if (fs.existsSync(unpackedPath)) {
+      ffmpegPath = unpackedPath;
+    } else {
+      // Fallback: try the original path (might work if asarUnpack worked differently)
+      const asarPath = path.join(process.resourcesPath, 'app.asar', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+      if (fs.existsSync(asarPath)) {
+        ffmpegPath = asarPath;
+      }
+    }
+  }
+  
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  console.log('FFmpeg path set to:', ffmpegPath);
 } else {
   console.warn('ffmpeg-static not found; relying on system ffmpeg in PATH');
 }
@@ -54,7 +72,7 @@ ipcMain.handle('get-file-info', async (event, filePath: string) => {
   }
 });
 
-ipcMain.handle('scan-videos', async (event, dirPath: string) => {
+ipcMain.handle('scan-videos', async (event, dirPath: string, options?: { thumbnailPercentage?: number; thumbnailJitter?: number }) => {
   console.log('Main process: scan-videos called with dirPath:', dirPath);
   
   // Check if directory exists
@@ -124,8 +142,11 @@ ipcMain.handle('scan-videos', async (event, dirPath: string) => {
             }
 
             const duration = metadata.format?.duration || 0;
-            const midPoint = Math.floor(duration / 2); // 50% of video duration
-            const timemarkSeconds = midPoint > 0 ? midPoint : 20; // Fallback to 1 second if duration can't be determined
+            const thumbnailPercentage = options?.thumbnailPercentage || 50;
+            const thumbnailJitter = options?.thumbnailJitter || 0;
+            const percentagePoint = Math.floor((duration * thumbnailPercentage) / 100);
+            const jitterOffset = thumbnailJitter > 0 ? Math.floor(Math.random() * thumbnailJitter) : 0;
+            const timemarkSeconds = Math.max(1, Math.min(duration - 1, percentagePoint + jitterOffset)); // Ensure within bounds
 
             ffmpeg(video.path)
               .screenshots({
@@ -136,7 +157,7 @@ ipcMain.handle('scan-videos', async (event, dirPath: string) => {
                 size: '320x180'
               })
               .on('end', () => {
-                console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (50% of ${duration}s)`);
+                console.log('Thumbnail generated for', path.basename(video.path), `at ${timemarkSeconds}s (${thumbnailPercentage}% + ${jitterOffset}s jitter of ${duration}s)`);
                 resolve(true);
               })
               .on('error', (err) => {

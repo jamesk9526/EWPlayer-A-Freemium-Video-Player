@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import '../App.css';
 import VideoCard from '../components/VideoCard';
 
@@ -30,8 +30,8 @@ interface LibraryProps {
   filteredVideos: Video[];
   sortedVideos: Video[];
   userProfile: UserProfile | null;
-  viewMode: 'grid' | 'list' | 'compact';
-  setViewMode: (mode: 'grid' | 'list' | 'compact') => void;
+  viewMode: 'grid';
+  setViewMode: (mode: 'grid') => void;
   sortBy: 'name' | 'date' | 'size';
   setSortBy: (sort: 'name' | 'date' | 'size') => void;
   isLoading: boolean;
@@ -44,7 +44,8 @@ interface LibraryProps {
   onDeleteVideo: (path: string) => void;
   setVideos: (videos: Video[] | ((prevVideos: Video[]) => Video[])) => void;
   onUpdateContentType?: (path: string, contentType: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media') => void;
-  cardSize?: 'small' | 'medium' | 'large' | 'extra-large';
+  cardSize?: 'small' | 'medium' | 'large' | 'extra-large' | 'giant' | 'massive';
+  cardSpacing?: 'tight' | 'compact' | 'normal' | 'comfortable' | 'loose';
   currentPage?: string;
   saveSettings?: (settings: any) => Promise<void>;
   settings?: any;
@@ -70,10 +71,104 @@ const Library: React.FC<LibraryProps> = ({
   setVideos,
   onUpdateContentType,
   cardSize = 'medium',
+  cardSpacing = 'normal',
   currentPage = 'home',
   saveSettings,
   settings
 }) => {
+  const [organizationMode, setOrganizationMode] = useState(false);
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [showGridOptions, setShowGridOptions] = useState(false);
+
+  // Debug: Log when cardSize changes
+  React.useEffect(() => {
+    console.log('Library component: cardSize prop changed to', cardSize);
+  }, [cardSize]);
+
+  // Debug: Log when settings changes
+  React.useEffect(() => {
+    console.log('Library component: settings prop changed, cardSize:', settings?.cardSize);
+  }, [settings]);
+
+  const toggleGridOptions = () => {
+    setShowGridOptions(!showGridOptions);
+  };
+
+  const handleCardSizeChange = async (size: 'small' | 'medium' | 'large' | 'extra-large' | 'giant' | 'massive') => {
+    if (saveSettings && settings) {
+      console.log('Changing card size from', cardSize, 'to', size);
+      await saveSettings({ ...settings, cardSize: size });
+      console.log('Card size change saved');
+    }
+  };
+
+  const handleCardSpacingChange = (spacing: 'tight' | 'compact' | 'normal' | 'comfortable' | 'loose') => {
+    if (saveSettings && settings) {
+      saveSettings({ ...settings, cardSpacing: spacing });
+    }
+  };
+
+  const handleThumbnailQualityChange = (quality: 'low' | 'medium' | 'high' | 'ultra') => {
+    if (saveSettings && settings) {
+      saveSettings({ ...settings, thumbnailQuality: quality });
+    }
+  };
+
+  const handleLayoutDensityChange = (density: 'comfortable' | 'compact' | 'dense') => {
+    if (saveSettings && settings) {
+      saveSettings({ ...settings, layoutDensity: density });
+    }
+  };
+
+  const handleAnimationSpeedChange = (speed: 'off' | 'slow' | 'normal' | 'fast') => {
+    if (saveSettings && settings) {
+      saveSettings({ ...settings, animationSpeed: speed });
+    }
+  };
+
+  const handleHoverEffectChange = (effect: 'none' | 'glow' | 'scale' | 'both') => {
+    if (saveSettings && settings) {
+      saveSettings({ ...settings, hoverEffect: effect });
+    }
+  };
+
+  const toggleOrganizationMode = () => {
+    setOrganizationMode(!organizationMode);
+    setSelectedVideos(new Set());
+  };
+
+  const handleVideoSelect = (videoPath: string) => {
+    if (organizationMode) {
+      setSelectedVideos(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(videoPath)) {
+          newSet.delete(videoPath);
+        } else {
+          newSet.add(videoPath);
+        }
+        return newSet;
+      });
+    } else {
+      onVideoSelect(videoPath);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedVideos.size === sortedVideos.length) {
+      setSelectedVideos(new Set());
+    } else {
+      setSelectedVideos(new Set(sortedVideos.map(v => v.path)));
+    }
+  };
+
+  const handleBulkContentTypeChange = (contentType: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media') => {
+    selectedVideos.forEach(videoPath => {
+      if (onUpdateContentType) {
+        onUpdateContentType(videoPath, contentType);
+      }
+    });
+    setSelectedVideos(new Set());
+  };
   const getPageTitle = () => {
     switch (currentPage) {
       case 'tv':
@@ -161,24 +256,15 @@ const Library: React.FC<LibraryProps> = ({
           </div>
           <div className="view-controls">
             <div className="view-toggle">
-              <button
-                className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setViewMode('grid')}
-              >
-                <span>⊞</span> Grid
-              </button>
-              <button
-                className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-                onClick={() => setViewMode('list')}
-              >
-                <span>☰</span> List
-              </button>
-              <button
-                className={`view-btn ${viewMode === 'compact' ? 'active' : ''}`}
-                onClick={() => setViewMode('compact')}
-              >
-                <span>⊡</span> Compact
-              </button>
+              <div className="grid-options-container">
+                <button
+                  className={`view-btn active`}
+                  onClick={toggleGridOptions}
+                  title="Grid options"
+                >
+                  <span>⊞</span> Grid Options
+                </button>
+              </div>
             </div>
             <div className="sort-dropdown">
               <select
@@ -192,11 +278,17 @@ const Library: React.FC<LibraryProps> = ({
                 <option value="size">Sort by Size</option>
               </select>
             </div>
-            <button className="browse-btn secondary" onClick={onOpenDisc} title={userProfile ? `${userProfile.name}, open a DVD or CD` : "Open a DVD or CD"}>Open Disc</button>
+            <button 
+              className={`org-toggle-btn ${organizationMode ? 'active' : ''}`}
+              onClick={toggleOrganizationMode}
+              title={organizationMode ? "Exit organization mode" : "Enter organization mode"}
+            >
+              <span>📋</span> Organize
+            </button>
           </div>
         </div>
       </div>
-      <div className={`video-grid-container ${viewMode}-view card-size-${cardSize}`}>
+      <div className={`video-grid-container ${viewMode}-view card-size-${cardSize} card-spacing-${cardSpacing} layout-density-${settings?.layoutDensity || 'comfortable'} animation-speed-${settings?.animationSpeed || 'normal'} hover-effect-${settings?.hoverEffect || 'glow'}`}>
         {isLoading && (
           <div className="loading">
             <div className="loading-spinner"></div>
@@ -236,7 +328,10 @@ const Library: React.FC<LibraryProps> = ({
             video={video}
             viewMode={viewMode}
             showQualityBadge={true}
-            onVideoSelect={onVideoSelect}
+            isSelected={selectedVideos.has(video.path)}
+            showCheckbox={organizationMode}
+            organizationMode={organizationMode}
+            onVideoSelect={handleVideoSelect}
             onShowInExplorer={onShowInExplorer}
             onDeleteVideo={onDeleteVideo}
             onToggleFavorite={(path) => {
@@ -268,6 +363,302 @@ const Library: React.FC<LibraryProps> = ({
           />
         ))}
       </div>
+      {organizationMode && (
+        <div className="organization-panel">
+          <div className="organization-header">
+            <h3>Organization Mode</h3>
+            <div className="selection-info">
+              {selectedVideos.size} video{selectedVideos.size !== 1 ? 's' : ''} selected
+            </div>
+            <div className="organization-actions">
+              <button 
+                className="org-btn secondary"
+                onClick={handleSelectAll}
+              >
+                {selectedVideos.size === sortedVideos.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button 
+                className="org-btn primary"
+                onClick={toggleOrganizationMode}
+              >
+                Exit Organization
+              </button>
+            </div>
+          </div>
+          {selectedVideos.size > 0 && (
+            <div className="bulk-actions">
+              <span className="bulk-label">Apply content type to selected videos:</span>
+              <div className="content-type-buttons">
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('movie')}
+                  title="Mark as Movie"
+                >
+                  🎬 Movie
+                </button>
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('tv-show')}
+                  title="Mark as TV Show"
+                >
+                  📺 TV Show
+                </button>
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('documentary')}
+                  title="Mark as Documentary"
+                >
+                  📚 Documentary
+                </button>
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('short')}
+                  title="Mark as Short Film"
+                >
+                  🎭 Short
+                </button>
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('music-video')}
+                  title="Mark as Music Video"
+                >
+                  🎵 Music Video
+                </button>
+                <button 
+                  className="content-type-btn"
+                  onClick={() => handleBulkContentTypeChange('home-media')}
+                  title="Mark as Home Media"
+                >
+                  🏠 Home Media
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {showGridOptions && (
+        <div className="grid-options-modal-overlay">
+          <div className="grid-options-modal-content">
+            <div className="grid-options-header">
+              <h3>Grid Options</h3>
+              <button 
+                className="close-options-btn"
+                onClick={toggleGridOptions}
+                title="Close options"
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid-option-section">
+              <h4>Card Size</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${cardSize === 'small' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('small')}
+                >
+                  Small
+                </button>
+                <button 
+                  className={`option-btn ${cardSize === 'medium' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('medium')}
+                >
+                  Medium
+                </button>
+                <button 
+                  className={`option-btn ${cardSize === 'large' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('large')}
+                >
+                  Large
+                </button>
+                <button 
+                  className={`option-btn ${cardSize === 'extra-large' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('extra-large')}
+                >
+                  Extra Large
+                </button>
+                <button 
+                  className={`option-btn ${cardSize === 'giant' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('giant')}
+                >
+                  Giant
+                </button>
+                <button 
+                  className={`option-btn ${cardSize === 'massive' ? 'active' : ''}`}
+                  onClick={() => handleCardSizeChange('massive')}
+                >
+                  Massive
+                </button>
+              </div>
+            </div>
+            <div className="grid-option-section">
+              <h4>Card Spacing</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${cardSpacing === 'tight' ? 'active' : ''}`}
+                  onClick={() => handleCardSpacingChange('tight')}
+                >
+                  Tight
+                </button>
+                <button 
+                  className={`option-btn ${cardSpacing === 'compact' ? 'active' : ''}`}
+                  onClick={() => handleCardSpacingChange('compact')}
+                >
+                  Compact
+                </button>
+                <button 
+                  className={`option-btn ${cardSpacing === 'normal' ? 'active' : ''}`}
+                  onClick={() => handleCardSpacingChange('normal')}
+                >
+                  Normal
+                </button>
+                <button 
+                  className={`option-btn ${cardSpacing === 'comfortable' ? 'active' : ''}`}
+                  onClick={() => handleCardSpacingChange('comfortable')}
+                >
+                  Comfortable
+                </button>
+                <button 
+                  className={`option-btn ${cardSpacing === 'loose' ? 'active' : ''}`}
+                  onClick={() => handleCardSpacingChange('loose')}
+                >
+                  Loose
+                </button>
+              </div>
+            </div>
+            <div className="grid-option-section">
+              <h4>Thumbnail Quality</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${(settings?.thumbnailQuality || 'medium') === 'low' ? 'active' : ''}`}
+                  onClick={() => handleThumbnailQualityChange('low')}
+                >
+                  Low
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.thumbnailQuality || 'medium') === 'medium' ? 'active' : ''}`}
+                  onClick={() => handleThumbnailQualityChange('medium')}
+                >
+                  Medium
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.thumbnailQuality || 'medium') === 'high' ? 'active' : ''}`}
+                  onClick={() => handleThumbnailQualityChange('high')}
+                >
+                  High
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.thumbnailQuality || 'medium') === 'ultra' ? 'active' : ''}`}
+                  onClick={() => handleThumbnailQualityChange('ultra')}
+                >
+                  Ultra
+                </button>
+              </div>
+            </div>
+            <div className="grid-option-section">
+              <h4>Layout Density</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${(settings?.layoutDensity || 'comfortable') === 'comfortable' ? 'active' : ''}`}
+                  onClick={() => handleLayoutDensityChange('comfortable')}
+                >
+                  Comfortable
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.layoutDensity || 'comfortable') === 'compact' ? 'active' : ''}`}
+                  onClick={() => handleLayoutDensityChange('compact')}
+                >
+                  Compact
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.layoutDensity || 'comfortable') === 'dense' ? 'active' : ''}`}
+                  onClick={() => handleLayoutDensityChange('dense')}
+                >
+                  Dense
+                </button>
+              </div>
+            </div>
+            <div className="grid-option-section">
+              <h4>Animation Speed</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${(settings?.animationSpeed || 'normal') === 'off' ? 'active' : ''}`}
+                  onClick={() => handleAnimationSpeedChange('off')}
+                >
+                  Off
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.animationSpeed || 'normal') === 'slow' ? 'active' : ''}`}
+                  onClick={() => handleAnimationSpeedChange('slow')}
+                >
+                  Slow
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.animationSpeed || 'normal') === 'normal' ? 'active' : ''}`}
+                  onClick={() => handleAnimationSpeedChange('normal')}
+                >
+                  Normal
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.animationSpeed || 'normal') === 'fast' ? 'active' : ''}`}
+                  onClick={() => handleAnimationSpeedChange('fast')}
+                >
+                  Fast
+                </button>
+              </div>
+            </div>
+            <div className="grid-option-section">
+              <h4>Hover Effects</h4>
+              <div className="option-buttons">
+                <button 
+                  className={`option-btn ${(settings?.hoverEffect || 'glow') === 'none' ? 'active' : ''}`}
+                  onClick={() => handleHoverEffectChange('none')}
+                >
+                  None
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.hoverEffect || 'glow') === 'glow' ? 'active' : ''}`}
+                  onClick={() => handleHoverEffectChange('glow')}
+                >
+                  Glow
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.hoverEffect || 'glow') === 'scale' ? 'active' : ''}`}
+                  onClick={() => handleHoverEffectChange('scale')}
+                >
+                  Scale
+                </button>
+                <button 
+                  className={`option-btn ${(settings?.hoverEffect || 'glow') === 'both' ? 'active' : ''}`}
+                  onClick={() => handleHoverEffectChange('both')}
+                >
+                  Both
+                </button>
+              </div>
+            </div>
+            <div className="grid-options-footer">
+              <button 
+                className="reset-options-btn"
+                onClick={() => {
+                  if (saveSettings && settings) {
+                    saveSettings({
+                      ...settings,
+                      cardSize: 'medium',
+                      cardSpacing: 'normal',
+                      thumbnailQuality: 'medium',
+                      layoutDensity: 'comfortable',
+                      animationSpeed: 'normal',
+                      hoverEffect: 'glow'
+                    });
+                  }
+                }}
+                title="Reset all grid options to defaults"
+              >
+                🔄 Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

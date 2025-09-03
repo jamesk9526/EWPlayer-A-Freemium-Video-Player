@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
 
   // Video scanning
-  scanVideos: (dir: string) => ipcRenderer.invoke('scan-videos', dir),
+  scanVideos: (dir: string, options?: { thumbnailPercentage?: number; thumbnailJitter?: number }) => ipcRenderer.invoke('scan-videos', dir, options),
 
   // Disc operations
   chooseDiscDrive: () => ipcRenderer.invoke('choose-disc-drive'),

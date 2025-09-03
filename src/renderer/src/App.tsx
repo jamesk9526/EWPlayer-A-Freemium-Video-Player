@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import SettingsPanel from './components/SettingsPanel';
 import Library from './pages/Library';
 import Player from './pages/Player';
 import MultiPlayer from './components/MultiPlayer';
+import SearchIcon from '@mui/icons-material/Search';
+import MovieIcon from '@mui/icons-material/Movie';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 // Use the exposed API from preload script
 const api = (window as any).api;
@@ -163,7 +166,7 @@ const LazyImage = ({ src, alt, className, width, height }: {
   );
 };
 
-// Helper functions for Netflix-style genres and ratings
+// Helper functions for ewplayer-style genres and ratings
 const getGenresForVideo = (contentType: string, fileName: string): string[] => {
   const lowerFileName = fileName.toLowerCase();
   const genres: string[] = [];
@@ -333,7 +336,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
       year,
       isPrivate: video.isPrivate ?? false,
       category: video.category ?? 'general',
-      // Add Netflix-style genres based on content type and filename
+      // Add ewplayer-style genres based on content type and filename
       genres: getGenresForVideo(contentType, fileName),
       rating: getRatingForVideo(contentType, fileName)
     };
@@ -709,7 +712,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
           featuredVideo: videos.find(v => v.isPrivate === true) || continueWatching[0] || null,
           rows: [
             { title: 'Continue Watching', items: continueWatching, type: 'continue', isShowGroup: false },
-            { title: 'My Favorites', items: videos.filter(v => v.isPrivate === true), type: 'default', isShowGroup: false },
+            { title: 'My Favorites', items: videos.filter(v => v.isFavorite === true), type: 'default', isShowGroup: false },
             { title: 'Watch Later', items: videos.filter(v => !v.watchedProgress || v.watchedProgress === 0), type: 'default', isShowGroup: false }
           ]
         };
@@ -799,13 +802,15 @@ const SettingsPage = ({
   setSettings, 
   saveSettings, 
   userProfile, 
-  onBack 
+  onBack,
+  rescanStartupFolders
 }: {
   settings: any;
   setSettings: (settings: any) => void;
   saveSettings: (settings: any) => Promise<void>;
   userProfile: UserProfile | null;
   onBack: () => void;
+  rescanStartupFolders: (currentSettings: any) => Promise<void>;
 }) => {
   return (
     <div className="settings-page">
@@ -1114,8 +1119,53 @@ const SettingsPage = ({
               <option value="medium">Medium (280px)</option>
               <option value="large">Large (360px)</option>
               <option value="extra-large">Extra Large (440px)</option>
+              <option value="giant">Giant (520px)</option>
+              <option value="massive">Massive (600px)</option>
             </select>
             <span className="setting-description">Adjust the size of video cards in the library</span>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="card-spacing">Card spacing</label>
+            <select id="card-spacing" defaultValue={settings.cardSpacing || "normal"}>
+              <option value="tight">Tight (12px)</option>
+              <option value="compact">Compact (16px)</option>
+              <option value="normal">Normal (20px)</option>
+              <option value="comfortable">Comfortable (28px)</option>
+              <option value="loose">Loose (36px)</option>
+            </select>
+            <span className="setting-description">Adjust spacing between video cards</span>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="thumbnail-percentage">Thumbnail position (%)</label>
+            <div className="range-container">
+              <input
+                type="range"
+                id="thumbnail-percentage"
+                min="10"
+                max="90"
+                step="5"
+                value={settings.thumbnailPercentage || 50}
+                onChange={(e) => {
+                  const newValue = parseInt(e.target.value);
+                  setSettings({ ...settings, thumbnailPercentage: newValue });
+                }}
+                title={`Current: ${settings.thumbnailPercentage || 50}%`}
+              />
+              <span className="range-value">{settings.thumbnailPercentage || 50}%</span>
+            </div>
+            <span className="setting-description">Position in video to capture thumbnail (10-90%)</span>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="thumbnail-jitter">Thumbnail jitter (seconds)</label>
+            <input
+              type="number"
+              id="thumbnail-jitter"
+              min="0"
+              max="60"
+              step="1"
+              defaultValue={settings.thumbnailJitter || 0}
+            />
+            <span className="setting-description">Randomize thumbnail timing by up to this many seconds</span>
           </div>
         </div>
 
@@ -1157,7 +1207,7 @@ const SettingsPage = ({
         </button>
         <button 
           className="primary-btn" 
-          onClick={() => {
+          onClick={async () => {
             // Collect current form values and save
             const form = document.querySelector('.settings-content') as HTMLElement;
             if (form) {
@@ -1178,6 +1228,11 @@ const SettingsPage = ({
               ranges.forEach((range: any) => {
                 const settingKey = range.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
                 newSettings[settingKey] = parseInt(range.value);
+              });
+              const numberInputs = form.querySelectorAll('input[type="number"]');
+              numberInputs.forEach((num: any) => {
+                const settingKey = num.id.replace(/-([a-z])/g, (_match: string, letter: string) => letter.toUpperCase());
+                newSettings[settingKey] = parseInt(num.value) || 0;
               });
               const inputs = form.querySelectorAll('input[type="text"], textarea');
               inputs.forEach((input: any) => {
@@ -1224,6 +1279,12 @@ const SettingsPage = ({
               newSettings.excludedFolders = excludedFolders;
               console.log('Saving excluded folders:', excludedFolders);
               
+              const thumbnailChanged = newSettings.thumbnailPercentage !== settings.thumbnailPercentage || newSettings.thumbnailJitter !== settings.thumbnailJitter;
+              if (thumbnailChanged) {
+                await api.clearThumbnailCache();
+                await rescanStartupFolders(newSettings);
+              }
+              
               saveSettings(newSettings);
               console.log('Final settings to save:', newSettings);
             }
@@ -1231,6 +1292,266 @@ const SettingsPage = ({
         >
           Save Settings
         </button>
+      </div>
+    </div>
+  );
+};
+
+// Search Modal Component
+const SearchModal = ({ 
+  isOpen, 
+  onClose, 
+  videos, 
+  onVideoSelect, 
+  searchTerm, 
+  setSearchTerm 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  videos: Video[];
+  onVideoSelect: (path: string) => void;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+}) => {
+  const [filteredVideos, setFilteredVideos] = useState<Video[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Filter videos based on search term and filters
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredVideos([]);
+      return;
+    }
+
+    let filtered = videos.filter(video => {
+      const fileName = video.path.split(/[/\\]/).pop()?.toLowerCase() || '';
+      const title = video.title?.toLowerCase() || '';
+      const searchLower = searchTerm.toLowerCase();
+
+      // Text search
+      const matchesText = fileName.includes(searchLower) || 
+                        title.includes(searchLower) || 
+                        video.path.toLowerCase().includes(searchLower);
+
+      if (!matchesText) return false;
+
+      // Category filter
+      if (selectedCategory !== 'all') {
+        if (selectedCategory === 'favorites' && !video.isFavorite) return false;
+        if (selectedCategory === 'watched' && (!video.watchedProgress || video.watchedProgress < 90)) return false;
+        if (selectedCategory === 'unwatched' && video.watchedProgress && video.watchedProgress > 0) return false;
+      }
+
+      // Type filter
+      if (selectedType !== 'all') {
+        if (selectedType === 'movie' && video.contentType !== 'movie') return false;
+        if (selectedType === 'tv-show' && video.contentType !== 'tv-show') return false;
+        if (selectedType === 'home-media' && video.contentType !== 'home-media') return false;
+      }
+
+      return true;
+    });
+
+    // Sort by relevance (title matches first, then filename matches)
+    filtered.sort((a, b) => {
+      const aTitle = a.title?.toLowerCase() || '';
+      const bTitle = b.title?.toLowerCase() || '';
+      const searchLower = searchTerm.toLowerCase();
+
+      const aTitleMatch = aTitle.includes(searchLower);
+      const bTitleMatch = bTitle.includes(searchLower);
+
+      if (aTitleMatch && !bTitleMatch) return -1;
+      if (!aTitleMatch && bTitleMatch) return 1;
+
+      return 0;
+    });
+
+    setFilteredVideos(filtered.slice(0, 50)); // Limit results
+  }, [searchTerm, videos, selectedCategory, selectedType]);
+
+  // Focus search input when modal opens
+  useEffect(() => {
+    if (isOpen && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="search-modal-overlay" onClick={onClose}>
+      <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="search-modal-header">
+          <div className="search-modal-input-wrapper">
+            <div className="search-modal-icon">
+              <SearchIcon />
+            </div>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="search-modal-input"
+              placeholder="Search videos, movies, TV shows..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {searchTerm && (
+              <button 
+                className="search-modal-clear"
+                onClick={() => setSearchTerm('')}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <button className="search-modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="search-modal-filters">
+          <div className="filter-group">
+            <label>Category:</label>
+            <select 
+              value={selectedCategory} 
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              title="Filter by category"
+            >
+              <option value="all">All Videos</option>
+              <option value="favorites">Favorites</option>
+              <option value="watched">Watched</option>
+              <option value="unwatched">Unwatched</option>
+            </select>
+          </div>
+          <div className="filter-group">
+            <label>Type:</label>
+            <select 
+              value={selectedType} 
+              onChange={(e) => setSelectedType(e.target.value)}
+              title="Filter by content type"
+            >
+              <option value="all">All Types</option>
+              <option value="movie">Movies</option>
+              <option value="tv-show">TV Shows</option>
+              <option value="home-media">Home Videos</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="search-modal-results">
+          {searchTerm.trim() === '' ? (
+            <div className="search-modal-empty">
+              <div className="search-modal-empty-icon">
+                <MovieIcon />
+              </div>
+              <h3>Search Your Library</h3>
+              <p>Find movies, TV shows, and videos by title, filename, or keywords</p>
+              <div className="search-modal-tips">
+                <div className="tip">
+                  <strong>Quick Tips:</strong>
+                </div>
+                <div className="tip">• Search by movie/show title</div>
+                <div className="tip">• Use keywords like "action", "comedy", "drama"</div>
+                <div className="tip">• Filter by favorites, watched, or type</div>
+              </div>
+            </div>
+          ) : filteredVideos.length === 0 ? (
+            <div className="search-modal-empty">
+              <div className="search-modal-empty-icon">
+                <SearchIcon />
+              </div>
+              <h3>No Results Found</h3>
+              <p>Try different keywords or adjust your filters</p>
+            </div>
+          ) : (
+            <>
+              <div className="search-results-header">
+                <span>{filteredVideos.length} result{filteredVideos.length !== 1 ? 's' : ''} found</span>
+              </div>
+              <div className="search-results-grid">
+                {filteredVideos.map((video, index) => {
+                  const fileName = video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') || '';
+                  const displayTitle = video.title || fileName;
+                  
+                  return (
+                    <div 
+                      key={video.path} 
+                      className="search-result-item"
+                      onClick={() => {
+                        onVideoSelect(video.path);
+                        onClose();
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onVideoSelect(video.path);
+                          onClose();
+                        }
+                      }}
+                    >
+                      <div className="search-result-thumbnail">
+                        <LazyImage
+                          src={video.thumbnail ? toFileUrl(video.thumbnail) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjEzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjEzNSIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjZmZmZmZmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIFRodW1ibmFpbDwvdGV4dD48L3N2Zz4='}
+                          alt={displayTitle}
+                          className="search-result-image"
+                          width={240}
+                          height={135}
+                        />
+                        <div className="search-result-play-overlay">
+                          <div className="search-result-play-button">▶</div>
+                        </div>
+                        {video.watchedProgress && video.watchedProgress > 0 && (
+                          <div className="search-result-progress">
+                            <div 
+                              className="search-result-progress-bar"
+                              data-progress={`${video.watchedProgress}%`}
+                            ></div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="search-result-info">
+                        <div className="search-result-title">{displayTitle}</div>
+                        <div className="search-result-meta">
+                          {video.contentType === 'movie' && video.year && (
+                            <span className="search-result-year">{video.year}</span>
+                          )}
+                          {video.contentType === 'tv-show' && video.season && video.episode && (
+                            <span className="search-result-episode">S{video.season}E{video.episode}</span>
+                          )}
+                          <span className="search-result-type">{video.contentType?.replace('-', ' ') || 'home video'}</span>
+                        </div>
+                        {video.isFavorite && (
+                          <div className="search-result-favorite">⭐ Favorite</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1264,6 +1585,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
   // Hash routing for MultiPlayer
   const [route, setRoute] = useState(window.location.hash.replace('#', '') || '/');
@@ -1435,7 +1757,7 @@ function App() {
   };
   const [isLoading, setIsLoading] = useState(false);
   const [videoKey, setVideoKey] = useState(0); // For triggering video element re-animation
-  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('grid');
+  const [viewMode, setViewMode] = useState<'grid'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<any>({ startupFolders: [], streamingMode: false, folderCategories: {} });
@@ -1583,7 +1905,7 @@ function App() {
             
             try {
               console.log('Auto-scanning folder:', folder);
-              const vids = await api.scanVideos(folder);
+              const vids = await api.scanVideos(folder, { thumbnailPercentage: loadedSettings.thumbnailPercentage, thumbnailJitter: loadedSettings.thumbnailJitter });
               console.log(`Auto-scan found ${vids.length} videos in ${folder}`);
               
               // Filter out videos from excluded subfolders
@@ -1646,12 +1968,14 @@ function App() {
           setVideos(videosWithSavedData);
         };
         
-        // Auto-scan startup folders if enabled
-        if (loadedSettings.autoScan === true && loadedSettings.startupFolders && loadedSettings.startupFolders.length > 0) {
-          console.log('Auto-scan enabled for folders:', loadedSettings.startupFolders);
+        // Auto-scan startup folders if they exist (regardless of autoScan setting)
+        if (loadedSettings.startupFolders && loadedSettings.startupFolders.length > 0) {
+          console.log('Scanning startup folders:', loadedSettings.startupFolders);
           scanFolders();
+        } else if (loadedSettings.autoScan === true) {
+          console.log('Auto-scan enabled but no startup folders configured');
         } else {
-          console.log('Auto-scan not enabled or no startup folders. autoScan:', loadedSettings.autoScan, 'startupFolders:', loadedSettings.startupFolders);
+          console.log('No startup folders configured. autoScan:', loadedSettings.autoScan);
         }
         
         setSettings(loadedSettings);
@@ -1686,6 +2010,84 @@ function App() {
     const updatedSettings = { ...settings, userProfile: profile };
     await saveSettings(updatedSettings);
   };
+
+  const rescanStartupFolders = React.useCallback(async (currentSettings: any) => {
+    const allVideos: any[] = [];
+    
+    for (const folder of currentSettings.startupFolders) {
+      // Skip excluded folders
+      if (currentSettings.excludedFolders && currentSettings.excludedFolders.includes(folder)) {
+        console.log('Skipping excluded folder:', folder);
+        continue;
+      }
+      
+      try {
+        console.log('Re-scanning folder:', folder);
+        const vids = await api.scanVideos(folder, { 
+          thumbnailPercentage: currentSettings.thumbnailPercentage,
+          thumbnailJitter: currentSettings.thumbnailJitter 
+        });
+        console.log(`Re-scan found ${vids.length} videos in ${folder}`);
+        
+        // Filter out videos from excluded subfolders
+        const filteredVids = (Array.isArray(vids) ? vids : []).filter((vid: any) => {
+          if (typeof vid === 'string') {
+            // Check if video path is in an excluded folder
+            return !currentSettings.excludedFolders?.some((excludedFolder: string) => 
+              vid.startsWith(excludedFolder)
+            );
+          }
+          return !currentSettings.excludedFolders?.some((excludedFolder: string) => 
+            vid.path?.startsWith(excludedFolder)
+          );
+        });
+        
+        const normalized = filteredVids.map((v: any, idx: number) => {
+          if (typeof v === 'string') {
+            const metadata = extractVideoMetadata(v);
+            return { 
+              path: v, 
+              thumbnail: '', 
+              watchedProgress: idx % 3 === 0 ? Math.floor(Math.random() * 100) : 0,
+              isPrivate: false, // Default to not private
+              category: 'general',
+              ...metadata
+            };
+          }
+          return { 
+            ...v, 
+            isPrivate: v.isPrivate ?? false,
+            category: v.category ?? 'general',
+            contentType: v.contentType ?? 'home-media'
+          };
+        });
+        allVideos.push(...normalized);
+      } catch (error) {
+        console.error('Error re-scanning folder:', folder, error);
+      }
+    }
+    
+    console.log('Total videos from re-scan:', allVideos.length);
+    
+    // Apply saved favorites and content types
+    const videosWithSavedData = allVideos.map(video => {
+      // Apply saved favorite status
+      const savedFavorite = currentSettings.favorites?.find((fav: any) => fav.path === video.path);
+      const isFavorite = savedFavorite ? true : (video.isFavorite ?? false);
+      
+      // Apply saved content type
+      const savedContentType = currentSettings.contentTypes?.find((ct: any) => ct.path === video.path);
+      const contentType = savedContentType ? savedContentType.contentType : video.contentType;
+      
+      return {
+        ...video,
+        isFavorite,
+        contentType
+      };
+    });
+    
+    setVideos(videosWithSavedData);
+  }, [extractVideoMetadata]);
 
   const updateVideoContentType = React.useCallback((path: string, newContentType: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media') => {
     setVideos(prevVideos => 
@@ -1745,7 +2147,7 @@ function App() {
       const dir = await api.selectDirectory();
       if (dir) {
         console.log('Selected directory:', dir);
-        const vids = await api.scanVideos(dir);
+        const vids = await api.scanVideos(dir, { thumbnailPercentage: settings.thumbnailPercentage, thumbnailJitter: settings.thumbnailJitter });
         console.log('Received videos:', vids);
         const normalized = (Array.isArray(vids) ? vids : []).map((v: any, idx: number) => {
           if (typeof v === 'string') {
@@ -1937,9 +2339,12 @@ function App() {
         pageFiltered = filteredVideos.filter(video => video.contentType === 'movie');
         break;
       case 'my-list':
-        // For now, show videos marked as favorites or in a custom list
-        // This can be expanded later with a proper favorites system
-        pageFiltered = filteredVideos.filter(video => video.isPrivate === true || (video.watchedProgress && video.watchedProgress > 0));
+        // Show videos marked as favorites, private, or in progress
+        pageFiltered = filteredVideos.filter(video => 
+          video.isFavorite === true || 
+          video.isPrivate === true || 
+          (video.watchedProgress && video.watchedProgress > 0)
+        );
         break;
       case 'home':
       default:
@@ -2032,83 +2437,22 @@ function App() {
                     </button>
                   </nav>
                 </div>
-                <div className="search-container" onClick={() => console.log('Search container clicked')}>
-                  <div className="search-wrapper" onClick={() => console.log('Search wrapper clicked')}>
-                    <input
-                      type="text"
-                      className="search-input"
-                      placeholder="Search videos... (try <1080>, [mp4], {movie}, (2020))"
-                      value={searchTerm}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setSearchTerm(value);
-                        if (value.length > 0) {
-                          const suggestions = generateSuggestions(value, videos);
-                          setSearchSuggestions(suggestions);
-                          setShowSuggestions(suggestions.length > 0);
-                        } else {
-                          setShowSuggestions(false);
-                        }
-                      }}
-                      onFocus={() => {
-                        console.log('Search input focused');
-                        if (searchTerm.length > 0) {
-                          const suggestions = generateSuggestions(searchTerm, videos);
-                          setSearchSuggestions(suggestions);
-                          setShowSuggestions(suggestions.length > 0);
-                        }
-                      }}
-                      onBlur={() => {
-                        console.log('Search input blurred');
-                        // Delay hiding suggestions to allow clicking on them
-                        setTimeout(() => setShowSuggestions(false), 200);
-                      }}
-                      onClick={() => {
-                        console.log('Search input clicked');
-                      }}
-                      onMouseEnter={() => {
-                        console.log('Mouse entered search input');
-                      }}
-                      onMouseLeave={() => {
-                        console.log('Mouse left search input');
-                      }}
-                      onMouseDown={() => {
-                        console.log('Mouse down on search input');
-                      }}
-                      onMouseUp={() => {
-                        console.log('Mouse up on search input');
-                      }}
-                      tabIndex={0}
-                      autoComplete="off"
-                      spellCheck={false}
-                      disabled={false}
-                      readOnly={false}
-                    />
-                    {showSuggestions && searchSuggestions.length > 0 && (
-                      <div className="search-suggestions">
-                        {searchSuggestions.map((suggestion, index) => (
-                          <div
-                            key={index}
-                            className="search-suggestion-item"
-                            onClick={() => {
-                              setSearchTerm(suggestion);
-                              setShowSuggestions(false);
-                            }}
-                          >
-                            {suggestion}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="search-container">
+                  <button 
+                    className="search-icon-btn"
+                    onClick={() => setIsSearchModalOpen(true)}
+                    title="Search videos"
+                  >
+                    <SearchIcon />
+                  </button>
                 </div>
                 <div className="header-actions">
                   <button 
                     className="settings-btn"
-                    onClick={() => setCurrentPage('settings')}
+                    onClick={() => setShowSettings(true)}
                     title={userProfile ? `${userProfile.name}'s Settings` : "Settings"}
                   >
-                    ⚙️
+                    <SettingsIcon />
                   </button>
                 </div>
                 <div className="window-controls">
@@ -2129,14 +2473,6 @@ function App() {
                 onBackToLibrary={() => setSelectedVideo(null)}
                 onDeleteVideo={deleteVideo}
                 onShowInExplorer={showInExplorer}
-              />
-            ) : currentPage === 'settings' ? (
-              <SettingsPage
-                settings={settings}
-                setSettings={setSettings}
-                saveSettings={saveSettings}
-                userProfile={userProfile}
-                onBack={() => setCurrentPage('home')}
               />
             ) : settings.theaterMode ? (
               <StreamingInterface 
@@ -2167,6 +2503,7 @@ function App() {
                 setVideos={setVideos}
                 onUpdateContentType={updateVideoContentType}
                 cardSize={settings.cardSize || 'medium'}
+                cardSpacing={settings.cardSpacing || 'normal'}
                 currentPage={currentPage}
                 saveSettings={saveSettings}
                 settings={settings}
@@ -2184,6 +2521,19 @@ function App() {
               onClose={() => setShowSettings(false)}
             />
           )}
+
+          {/* Search Modal */}
+          <SearchModal
+            isOpen={isSearchModalOpen}
+            onClose={() => setIsSearchModalOpen(false)}
+            videos={videos}
+            onVideoSelect={(path) => {
+              playVideo(path);
+              setIsSearchModalOpen(false);
+            }}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+          />
             </>
           )}
         </>

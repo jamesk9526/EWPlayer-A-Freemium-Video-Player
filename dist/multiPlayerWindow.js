@@ -63,6 +63,14 @@ function createMultiPlayerWindow(payload) {
         ? `${process.env.VITE_DEV_SERVER_URL}#/multi-player`
         : `file://${path.join(__dirname, '../renderer/index.html')}#/multi-player`;
     multiPlayerWin.loadURL(url);
+    // Handle F12 to open developer tools
+    multiPlayerWin.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'F12' && !input.control && !input.alt && !input.meta && !input.shift) {
+            console.log('F12 pressed in multi-player window - opening dev tools');
+            event.preventDefault();
+            multiPlayerWin.webContents.toggleDevTools();
+        }
+    });
     multiPlayerWin.once('ready-to-show', () => {
         multiPlayerWin === null || multiPlayerWin === void 0 ? void 0 : multiPlayerWin.show();
         if (payload === null || payload === void 0 ? void 0 : payload.initialVideoId) {

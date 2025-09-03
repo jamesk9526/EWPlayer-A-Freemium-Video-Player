@@ -21,7 +21,7 @@ interface Video {
   codec?: string; // e.g., "H.264", "H.265"
   isFavorite?: boolean;
   lastWatched?: Date;
-  genres?: string[]; // Netflix-style genres
+  genres?: string[]; // ewplayer-style genres
   rating?: string; // e.g., "PG-13", "R"
   director?: string;
   cast?: string[];
@@ -129,14 +129,17 @@ const formatDuration = (seconds?: number) => {
 
 interface VideoCardProps {
   video: Video;
-  viewMode?: 'grid' | 'list' | 'compact';
+  viewMode?: 'grid';
   isSelected?: boolean;
   showQualityBadge?: boolean;
+  showCheckbox?: boolean;
+  organizationMode?: boolean;
   onVideoSelect?: (path: string) => void;
   onShowInExplorer?: (path: string) => void;
   onDeleteVideo?: (path: string) => void;
   onToggleFavorite?: (path: string) => void;
   onUpdateContentType?: (path: string, contentType: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media') => void;
+  onOpenContentTypeModal?: (videoPath: string) => void;
   userProfile?: UserProfile | null;
   className?: string;
   coverStyle?: 'horizontal' | 'vertical';
@@ -148,21 +151,22 @@ const VideoCard: React.FC<VideoCardProps> = ({
   viewMode = 'grid',
   isSelected = false,
   showQualityBadge = false,
+  showCheckbox = false,
+  organizationMode = false,
   onVideoSelect,
   onShowInExplorer,
   onDeleteVideo,
   onToggleFavorite,
   onUpdateContentType,
+  onOpenContentTypeModal,
   userProfile,
   className = '',
   coverStyle = 'horizontal',
   layoutDensity = 'comfortable'
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [showContentTypeMenu, setShowContentTypeMenu] = useState(false);
 
   const title = video.title || (video.path ? video.path.split(/[/\\]/).pop()?.replace(/\.[^/.]+$/, '') : 'Unknown Video');
-  const extension = video.path ? video.path.split('.').pop()?.toUpperCase() : '';
 
   const contentTypeOptions = [
     { value: 'movie', label: '🎬 Movie', icon: '🎬' },
@@ -196,7 +200,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
   return (
     <div
-      className={`video-card ${viewMode}-style ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''} ${coverStyle}-cover ${layoutDensity}-layout ${className}`}
+      className={`video-card ${viewMode}-style ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''} ${coverStyle}-cover ${layoutDensity}-layout ${organizationMode ? 'organization-mode' : ''} ${className}`}
       onClick={handleCardClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -222,31 +226,33 @@ const VideoCard: React.FC<VideoCardProps> = ({
           height={180}
         />
 
-        {/* Enhanced quality badges */}
-        <div className="badges-container">
-          {showQualityBadge && extension && (
-            <div className="quality-badge">{extension}</div>
-          )}
-          {video.resolution && (
-            <div className="resolution-badge">{video.resolution}</div>
-          )}
-          {video.codec && (
-            <div className="codec-badge">{video.codec}</div>
-          )}
-          {video.isFavorite && (
-            <div className="favorite-badge">❤️</div>
-          )}
-        </div>
+        {/* Selection checkbox overlay */}
+        {showCheckbox && (
+          <div className="selection-overlay">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => {
+                e.stopPropagation();
+                onVideoSelect?.(video.path);
+              }}
+              className="video-checkbox"
+              aria-label={`Select ${title}`}
+            />
+          </div>
+        )}
 
         {/* Play overlay */}
-        <div className="play-overlay">
-          <div className="play-button">
-            <span className="play-icon">▶</span>
+        {!showCheckbox && (
+          <div className="play-overlay">
+            <div className="play-button">
+              <span className="play-icon">▶</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Enhanced card content with Netflix styling */}
+      {/* Enhanced card content with ewplayer styling */}
       <div className="card-content">
         <div className="card-header">
           <h3 className="card-title" title={title}>{title}</h3>
@@ -265,7 +271,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           )}
         </div>
 
-        {/* Netflix-style genre tags */}
+        {/* ewplayer-style genre tags */}
         {video.genres && video.genres.length > 0 && (
           <ul className="movie-gen">
             {video.genres.slice(0, 3).map((genre, index) => (
@@ -274,7 +280,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           </ul>
         )}
 
-        {/* Enhanced metadata with Netflix typography */}
+        {/* Enhanced metadata with ewplayer typography */}
         <div className="card-metadata">
           <div className="metadata-row">
             {video.year && (
@@ -334,7 +340,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           )}
         </div>
 
-        {/* Netflix-style watch button */}
+        {/* ewplayer-style watch button */}
         <button
           className="watch-btn"
           onClick={(e) => {
@@ -378,39 +384,17 @@ const VideoCard: React.FC<VideoCardProps> = ({
             </button>
           )}
           {onUpdateContentType && (
-            <div className="content-type-selector">
-              <button
-                className="action-btn content-type-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowContentTypeMenu(!showContentTypeMenu);
-                }}
-                title="Change content type"
-                aria-label="Change content type"
-              >
-                {currentContentType.icon}
-              </button>
-              {showContentTypeMenu && (
-                <div className="content-type-menu">
-                  {contentTypeOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      className={`content-type-option ${option.value === video.contentType ? 'active' : ''}`}
-                      data-type={option.value}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onUpdateContentType(video.path, option.value as any);
-                        setShowContentTypeMenu(false);
-                      }}
-                      title={`Set as ${option.label}`}
-                    >
-                      <span className="option-icon">{option.icon}</span>
-                      <span className="option-label">{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              className="action-btn content-type-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenContentTypeModal?.(video.path);
+              }}
+              title="Change content type"
+              aria-label="Change content type"
+            >
+              {currentContentType.icon}
+            </button>
           )}
           {onShowInExplorer && (
             <button
