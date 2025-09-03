@@ -5,12 +5,20 @@
   "description": "Native Windows video player with library management",
   "main": "dist/main.js",
   "homepage": ".",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamesk9526/EWPlayer-A-Freemium-Video-Player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jamesk9526/EWPlayer-A-Freemium-Video-Player/issues"
+  },
   "scripts": {
   "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && npm run start:main\"",
     "start:main": "npm run build:main && cross-env NODE_ENV=development electron .",
     "start:renderer": "cd src/renderer && npm start",
-    "build": "npm run build:renderer && npm run build:main",
+    "build": "npm run build:renderer && npm run build:main && npm run build:preload",
     "build:main": "tsc -p src/main",
+    "build:preload": "tsc -p src/preload",
     "build:renderer": "cd src/renderer && npm run build",
   "icons:rebuild": "node rebuild-ico.js",
   "dist": "npm run icons:rebuild && npm run build && electron-builder",
@@ -103,7 +111,15 @@
     "video",
     "player",
     "media",
-    "windows"
+    "windows",
+    "electron",
+    "video-library",
+    "media-player",
+    "desktop-app",
+    "video-organizer",
+    "movie-player",
+    "tv-shows",
+    "multimedia"
   ],
   "author": "EwPlayer Team",
   "license": "ISC",

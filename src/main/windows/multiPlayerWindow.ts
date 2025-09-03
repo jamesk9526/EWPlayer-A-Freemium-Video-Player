@@ -20,7 +20,7 @@ export function createMultiPlayerWindow(payload?: { initialVideoId?: string }) {
     vibrancy: 'sidebar',
     backgroundColor: '#111111',
     webPreferences: {
-      preload: path.join(__dirname, '../../preload/preload.js'),
+      preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -29,7 +29,7 @@ export function createMultiPlayerWindow(payload?: { initialVideoId?: string }) {
   // If you use React Router, point to a route like #/multi-player
   const url = process.env.VITE_DEV_SERVER_URL
     ? `${process.env.VITE_DEV_SERVER_URL}#/multi-player`
-    : `file://${path.join(__dirname, '../renderer/index.html')}#/multi-player`;
+    : `file://${path.join(__dirname, '../../src/renderer/build/index.html')}#/multi-player`;
 
   multiPlayerWin.loadURL(url);
 

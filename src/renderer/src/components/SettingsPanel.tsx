@@ -1,6 +1,7 @@
 import React from 'react';
 
-const ipcRenderer = (window as any).require('electron').ipcRenderer;
+// Use the exposed API from preload script
+const api = (window as any).api;
 
 interface UserProfile {
   name: string;
@@ -156,7 +157,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="add-marked-btn"
                     onClick={async () => {
                       try {
-                        const result = await ipcRenderer.invoke('select-file-or-folder');
+                        const result = await api.selectFileOrFolder();
                         if (result) {
                           const currentItems = settings.markedItems || [];
                           const newItem = {
@@ -225,7 +226,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="add-excluded-btn"
                     onClick={async () => {
                       try {
-                        const folderPath = await ipcRenderer.invoke('select-directory');
+                        const folderPath = await api.selectDirectory();
                         if (folderPath) {
                           const currentFolders = settings.excludedFolders || [];
                           // Check if folder is already excluded
@@ -386,7 +387,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="add-folder-btn"
                     onClick={async () => {
                       try {
-                        const folderPath = await ipcRenderer.invoke('select-directory');
+                        const folderPath = await api.selectDirectory();
                         if (folderPath) {
                           const currentFolders = settings.startupFolders || [];
                           const newFolders = [...currentFolders, folderPath];
@@ -489,7 +490,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 className="secondary-btn clear-cache-btn"
                 onClick={async () => {
                   try {
-                    const success = await ipcRenderer.invoke('clear-thumbnail-cache');
+                    const success = await api.clearThumbnailCache();
                     if (success) {
                       alert('Thumbnail cache cleared successfully!');
                     } else {

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 General Discussion
+    url: https://github.com/jamesk9526/EWPlayer-A-Freemium-Video-Player/discussions
+    about: Use GitHub Discussions for general questions, feedback, and community support
+  - name: 📖 Documentation
+    url: https://github.com/jamesk9526/EWPlayer-A-Freemium-Video-Player/wiki
+    about: Check the wiki for documentation, guides, and FAQs
+  - name: 🐛 Report Security Issue
+    url: https://github.com/jamesk9526/EWPlayer-A-Freemium-Video-Player/security/advisories/new
+    about: Report security vulnerabilities privately

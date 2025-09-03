@@ -47,9 +47,9 @@ export function createWindow() {
     titleBarStyle: 'hidden',
     icon: path.join(__dirname, '../../../assets/icon.ico'), // Windows icon
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      // Allow loading file:/// thumbnails while renderer uses http://localhost in dev
+      preload: path.join(__dirname, '../preload/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       webSecurity: !isDev,
     },
     show: false, // Don't show until ready
@@ -82,12 +82,8 @@ export function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
-    // In production, CRA outputs to src/renderer/build. Our compiled main.js lives in dist/.
-    // __dirname points to app.asar/dist, so go up one and into src/renderer/build.
-    const prodIndex = path.join(__dirname, '../../../src/renderer/build/index.html');
-    if (!fs.existsSync(prodIndex)) {
-      console.error('Production index.html not found at', prodIndex);
-    }
+    // In production, load from the packaged renderer build
+    const prodIndex = path.join(__dirname, '../../src/renderer/build/index.html');
     mainWindow.loadFile(prodIndex);
   }
 

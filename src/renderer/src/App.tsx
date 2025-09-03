@@ -5,7 +5,8 @@ import Library from './pages/Library';
 import Player from './pages/Player';
 import MultiPlayer from './components/MultiPlayer';
 
-const ipcRenderer = (window as any).require('electron').ipcRenderer;
+// Use the exposed API from preload script
+const api = (window as any).api;
 
 interface Video {
   path: string;
@@ -932,7 +933,7 @@ const SettingsPage = ({
                   className="add-marked-btn"
                   onClick={async () => {
                     try {
-                      const result = await ipcRenderer.invoke('select-file-or-folder');
+                      const result = await api.selectFileOrFolder();
                       if (result) {
                         const currentItems = settings.markedItems || [];
                         const newItem = {
@@ -1001,7 +1002,7 @@ const SettingsPage = ({
                   className="add-excluded-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await ipcRenderer.invoke('select-directory');
+                      const folderPath = await api.selectDirectory();
                       if (folderPath) {
                         const currentFolders = settings.excludedFolders || [];
                         // Check if folder is already excluded
@@ -1078,7 +1079,7 @@ const SettingsPage = ({
                   className="add-folder-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await ipcRenderer.invoke('select-directory');
+                      const folderPath = await api.selectDirectory();
                       if (folderPath) {
                         const currentFolders = settings.startupFolders || [];
                         const newFolders = [...currentFolders, folderPath];
@@ -1132,7 +1133,7 @@ const SettingsPage = ({
               className="secondary-btn clear-cache-btn"
               onClick={async () => {
                 try {
-                  const success = await ipcRenderer.invoke('clear-thumbnail-cache');
+                  const success = await api.clearThumbnailCache();
                   if (success) {
                     alert('Thumbnail cache cleared successfully!');
                   } else {
@@ -1246,15 +1247,15 @@ const toFileUrl = (p?: string) => {
 
 // Window control functions
 const minimizeWindow = () => {
-  ipcRenderer.invoke('window-minimize');
+  api.minimizeWindow();
 };
 
 const maximizeWindow = () => {
-  ipcRenderer.invoke('window-maximize');
+  api.maximizeWindow();
 };
 
 const closeWindow = () => {
-  ipcRenderer.invoke('window-close');
+  api.closeWindow();
 };
 
 function App() {
@@ -1547,7 +1548,7 @@ function App() {
   React.useEffect(() => {
     const loadSettings = async () => {
       try {
-        const loadedSettings = await ipcRenderer.invoke('load-settings');
+        const loadedSettings = await api.loadSettings();
         console.log('Loaded settings:', loadedSettings);
         
         // Ensure startupFolders is always an array
@@ -1582,7 +1583,7 @@ function App() {
             
             try {
               console.log('Auto-scanning folder:', folder);
-              const vids = await ipcRenderer.invoke('scan-videos', folder);
+              const vids = await api.scanVideos(folder);
               console.log(`Auto-scan found ${vids.length} videos in ${folder}`);
               
               // Filter out videos from excluded subfolders
@@ -1665,7 +1666,7 @@ function App() {
 
   const saveSettings = React.useCallback(async (newSettings: any) => {
     try {
-      const success = await ipcRenderer.invoke('save-settings', newSettings);
+      const success = await api.saveSettings(newSettings);
       if (success) {
         setSettings(newSettings);
         console.log('Settings saved successfully');
@@ -1714,7 +1715,7 @@ function App() {
 
   // Handle file opening from Windows file associations
   React.useEffect(() => {
-    const handleFileOpen = (event: any, filePath: string) => {
+    const handleFileOpen = (filePath: string) => {
       if (filePath && typeof filePath === 'string') {
         // Create a video object and play it
         const video: Video = {
@@ -1732,20 +1733,19 @@ function App() {
       }
     };
 
-    ipcRenderer.on('open-file', handleFileOpen);
+    // Set up the event listener using the preload API
+    api.onOpenFile(handleFileOpen);
 
-    return () => {
-      ipcRenderer.removeListener('open-file', handleFileOpen);
-    };
+    // Cleanup is handled by the preload API
   }, [playVideo]);
 
   const selectDirectory = async () => {
     try {
       setIsLoading(true);
-      const dir = await ipcRenderer.invoke('select-directory');
+      const dir = await api.selectDirectory();
       if (dir) {
         console.log('Selected directory:', dir);
-        const vids = await ipcRenderer.invoke('scan-videos', dir);
+        const vids = await api.scanVideos(dir);
         console.log('Received videos:', vids);
         const normalized = (Array.isArray(vids) ? vids : []).map((v: any, idx: number) => {
           if (typeof v === 'string') {
@@ -1799,7 +1799,7 @@ function App() {
   const deleteVideo = async (path: string) => {
     const confirmed = window.confirm('Are you sure you want to delete this video?');
     if (confirmed) {
-      const success = await ipcRenderer.invoke('delete-video', path);
+      const success = await api.deleteVideo(path);
       if (success) {
         setVideos(videos.filter(v => v.path !== path));
         if (selectedVideo === path) {
@@ -1811,7 +1811,7 @@ function App() {
 
   const openSingleFile = async () => {
     try {
-      const filePath = await ipcRenderer.invoke('open-file-dialog');
+      const filePath = await api.openFileDialog();
       if (filePath) {
         const video: Video = {
           path: filePath,
@@ -1834,12 +1834,12 @@ function App() {
   const openDisc = async () => {
   setIsLoading(true);
     try {
-      const drive: string | null = await ipcRenderer.invoke('choose-disc-drive');
+      const drive: string | null = await api.chooseDiscDrive();
       if (!drive) {
         return;
       }
   // Scanning disc
-      const result: any = await ipcRenderer.invoke('scan-disc', drive);
+      const result: any = await api.scanDisc(drive);
       if (!result || result.kind === 'none') {
         alert('No playable media found on this disc.');
         return;
@@ -1861,7 +1861,7 @@ function App() {
           return;
         }
   // Converting DVD to MP4 may take a while
-        const outPath: string | null = await ipcRenderer.invoke('convert-dvd-title', vobs);
+        const outPath: string | null = await api.convertDvdTitle(vobs);
         if (!outPath) {
           alert('Failed to convert DVD to a playable file.');
           return;
@@ -1881,7 +1881,7 @@ function App() {
 
   const showInExplorer = async (filePath: string) => {
     try {
-      await ipcRenderer.invoke('show-in-explorer', filePath);
+      await api.showInExplorer(filePath);
     } catch (error) {
       console.error('Error showing in explorer:', error);
     }
