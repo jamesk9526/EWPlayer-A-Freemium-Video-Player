@@ -1001,7 +1001,7 @@ const SettingsPage = ({
                   className="add-excluded-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await window.api.selectDirectory();
+                      const folderPath = await ipcRenderer.invoke('select-directory');
                       if (folderPath) {
                         const currentFolders = settings.excludedFolders || [];
                         // Check if folder is already excluded
@@ -1078,7 +1078,7 @@ const SettingsPage = ({
                   className="add-folder-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await window.api.selectDirectory();
+                      const folderPath = await ipcRenderer.invoke('select-directory');
                       if (folderPath) {
                         const currentFolders = settings.startupFolders || [];
                         const newFolders = [...currentFolders, folderPath];
@@ -1742,7 +1742,7 @@ function App() {
   const selectDirectory = async () => {
     try {
       setIsLoading(true);
-      const dir = await window.api.selectDirectory();
+      const dir = await ipcRenderer.invoke('select-directory');
       if (dir) {
         console.log('Selected directory:', dir);
         const vids = await ipcRenderer.invoke('scan-videos', dir);

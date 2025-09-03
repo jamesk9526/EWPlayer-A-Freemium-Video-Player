@@ -225,7 +225,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="add-excluded-btn"
                     onClick={async () => {
                       try {
-                        const folderPath = await window.api.selectDirectory();
+                        const folderPath = await ipcRenderer.invoke('select-directory');
                         if (folderPath) {
                           const currentFolders = settings.excludedFolders || [];
                           // Check if folder is already excluded
@@ -386,7 +386,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     className="add-folder-btn"
                     onClick={async () => {
                       try {
-                        const folderPath = await window.api.selectDirectory();
+                        const folderPath = await ipcRenderer.invoke('select-directory');
                         if (folderPath) {
                           const currentFolders = settings.startupFolders || [];
                           const newFolders = [...currentFolders, folderPath];

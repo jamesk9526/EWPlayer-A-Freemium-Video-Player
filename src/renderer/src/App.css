@@ -2037,20 +2037,6 @@ html, body { overflow-x: hidden; } /* safety net */
   }
 }
 
-/* DNO (private library) UI helpers */
-.dno-pin-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.dno-folder-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 8px;
-}
-
-
 /* Dark mode video player enhancements */
 @media (prefers-color-scheme: dark) {
   .custom-video-container {
