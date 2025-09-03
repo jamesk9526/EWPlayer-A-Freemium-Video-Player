@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
-import SettingsPanel from './SettingsPanel';
-import Library from './Library';
-import Player from './Player';
+import SettingsPanel from './components/SettingsPanel';
+import Library from './pages/Library';
+import Player from './pages/Player';
 import MultiPlayer from './components/MultiPlayer';
 
 const ipcRenderer = (window as any).require('electron').ipcRenderer;
@@ -14,7 +14,7 @@ interface Video {
     size: number;
   };
   watchedProgress?: number; // 0-100
-  contentType?: 'movie' | 'tv-show' | 'home-media';
+  contentType?: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media';
   category?: string;
   isPrivate?: boolean;
   isFavorite?: boolean;
@@ -162,6 +162,105 @@ const LazyImage = ({ src, alt, className, width, height }: {
   );
 };
 
+// Helper functions for Netflix-style genres and ratings
+const getGenresForVideo = (contentType: string, fileName: string): string[] => {
+  const lowerFileName = fileName.toLowerCase();
+  const genres: string[] = [];
+
+  // Content type based genres
+  switch (contentType) {
+    case 'movie':
+      genres.push('Movies');
+      break;
+    case 'tv-show':
+      genres.push('TV Shows');
+      break;
+    case 'documentary':
+      genres.push('Documentaries');
+      break;
+    case 'short':
+      genres.push('Short Films');
+      break;
+    case 'music-video':
+      genres.push('Music Videos');
+      break;
+    default:
+      genres.push('Home Videos');
+  }
+
+  // Filename-based genre detection
+  if (lowerFileName.includes('action') || lowerFileName.includes('adventure')) {
+    genres.push('Action & Adventure');
+  }
+  if (lowerFileName.includes('comedy') || lowerFileName.includes('funny')) {
+    genres.push('Comedy');
+  }
+  if (lowerFileName.includes('drama') || lowerFileName.includes('dramatic')) {
+    genres.push('Drama');
+  }
+  if (lowerFileName.includes('horror') || lowerFileName.includes('thriller')) {
+    genres.push('Horror');
+  }
+  if (lowerFileName.includes('romance') || lowerFileName.includes('romantic')) {
+    genres.push('Romance');
+  }
+  if (lowerFileName.includes('sci-fi') || lowerFileName.includes('science fiction')) {
+    genres.push('Sci-Fi');
+  }
+  if (lowerFileName.includes('fantasy')) {
+    genres.push('Fantasy');
+  }
+  if (lowerFileName.includes('animation') || lowerFileName.includes('animated')) {
+    genres.push('Animation');
+  }
+  if (lowerFileName.includes('documentary') || lowerFileName.includes('docu')) {
+    genres.push('Documentary');
+  }
+  if (lowerFileName.includes('music') || lowerFileName.includes('musical')) {
+    genres.push('Musical');
+  }
+
+  // Return unique genres, limited to 3
+  return Array.from(new Set(genres)).slice(0, 3);
+};
+
+const getRatingForVideo = (contentType: string, fileName: string): string => {
+  const lowerFileName = fileName.toLowerCase();
+
+  // Age-based ratings from filename patterns
+  if (lowerFileName.includes('pg-13') || lowerFileName.includes('pg13')) {
+    return 'PG-13';
+  }
+  if (lowerFileName.includes('pg')) {
+    return 'PG';
+  }
+  if (lowerFileName.includes('r-rated') || lowerFileName.includes('r rating')) {
+    return 'R';
+  }
+  if (lowerFileName.includes('nc-17') || lowerFileName.includes('nc17')) {
+    return 'NC-17';
+  }
+  if (lowerFileName.includes('g-rated') || lowerFileName.includes('g rating')) {
+    return 'G';
+  }
+
+  // Content type based default ratings
+  switch (contentType) {
+    case 'movie':
+      return 'PG-13'; // Default for movies
+    case 'tv-show':
+      return 'TV-14'; // Default for TV shows
+    case 'documentary':
+      return 'TV-PG'; // Default for documentaries
+    case 'short':
+      return 'G'; // Default for short films
+    case 'music-video':
+      return 'PG'; // Default for music videos
+    default:
+      return 'Not Rated'; // Default for home videos
+  }
+};
+
 // Theater-style Streaming Interface Component
 const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, currentPage }: {
   videos: Video[];
@@ -174,6 +273,8 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
   const [selectedShowData, setSelectedShowData] = useState<any>(null);
   const [currentView, setCurrentView] = useState<'main' | 'category' | 'tv-shows' | 'movies' | 'home-videos' | 'continue-watching'>('main');
   const [categoryData, setCategoryData] = useState<{ title: string; items: any[]; isShowGroup: boolean }>({ title: '', items: [], isShowGroup: false });
+  const [coverStyle, setCoverStyle] = useState<'horizontal' | 'vertical'>(settings.theaterCoverStyle || 'horizontal');
+  const [layoutDensity, setLayoutDensity] = useState<'comfortable' | 'compact' | 'dense'>(settings.theaterLayoutDensity || 'comfortable');
 
   // Normalize video data and re-detect content types
   const normalizedVideos = videos.map(video => {
@@ -230,7 +331,10 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
       episode,
       year,
       isPrivate: video.isPrivate ?? false,
-      category: video.category ?? 'general'
+      category: video.category ?? 'general',
+      // Add Netflix-style genres based on content type and filename
+      genres: getGenresForVideo(contentType, fileName),
+      rating: getRatingForVideo(contentType, fileName)
     };
   });
 
@@ -360,7 +464,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
                   </div>
                   {watchedProgress && watchedProgress > 0 && (
                     <div className="category-item-progress">
-                      <div className="category-item-progress-bar" style={{'--progress': `${watchedProgress}%`} as React.CSSProperties}></div>
+                      <div className="category-item-progress-bar" data-progress={`${watchedProgress}%`}></div>
                     </div>
                   )}
                 </div>
@@ -431,7 +535,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
                       <div className="episode-progress">
                         <div 
                           className="episode-progress-bar" 
-                          style={{'--progress': `${episode.watchedProgress}%`} as React.CSSProperties}
+                          data-progress={`${episode.watchedProgress}%`}
                         ></div>
                       </div>
                     )}
@@ -535,7 +639,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
                   {watchedProgress && watchedProgress > 0 && (
                     <div className="progress-indicator">
                       <div className="progress-bar-bg">
-                        <div className="progress-bar-fill" style={{ width: `${watchedProgress}%` }}></div>
+                        <div className="progress-bar-fill" data-progress={`${watchedProgress}%`}></div>
                       </div>
                     </div>
                   )}
@@ -627,7 +731,7 @@ const StreamingInterface = ({ videos, userProfile, onVideoSelect, settings, curr
   const pageContent = getPageContent();
 
   return (
-    <div className="streaming-interface">
+    <div className={`streaming-interface ${coverStyle === 'vertical' ? 'vertical-covers' : ''} ${layoutDensity}-layout`}>
       {/* Show message if no videos at all */}
       {videos.length === 0 ? (
         <div className="empty-state">
@@ -897,7 +1001,7 @@ const SettingsPage = ({
                   className="add-excluded-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await ipcRenderer.invoke('select-directory');
+                      const folderPath = await window.api.selectDirectory();
                       if (folderPath) {
                         const currentFolders = settings.excludedFolders || [];
                         // Check if folder is already excluded
@@ -974,7 +1078,7 @@ const SettingsPage = ({
                   className="add-folder-btn"
                   onClick={async () => {
                     try {
-                      const folderPath = await ipcRenderer.invoke('select-directory');
+                      const folderPath = await window.api.selectDirectory();
                       if (folderPath) {
                         const currentFolders = settings.startupFolders || [];
                         const newFolders = [...currentFolders, folderPath];
@@ -1291,8 +1395,8 @@ function App() {
 
     // Resolution filter
     if (filters.resolution) {
-      const hasResolution = fileName.includes(filters.resolution) ||
-                           fileName.includes('p') && fileName.includes(filters.resolution) ||
+      const hasResolution = (fileName.includes(filters.resolution) ||
+                           (fileName.includes('p') && fileName.includes(filters.resolution))) ||
                            (filters.resolution === '2160' && (fileName.includes('4k') || fileName.includes('2160'))) ||
                            (filters.resolution === '4320' && (fileName.includes('8k') || fileName.includes('4320')));
       if (!hasResolution) return false;
@@ -1339,19 +1443,47 @@ function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'tv' | 'movies' | 'my-list' | 'settings'>('home');
 
   // Auto-detect content type based on filename and folder structure
-  const detectContentType = (filePath: string): 'movie' | 'tv-show' | 'home-media' => {
+  const detectContentType = (filePath: string): 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media' => {
     const fileName = filePath.toLowerCase();
     const folderPath = filePath.toLowerCase();
     
-    // TV Show patterns
-    if (fileName.match(/s\d{2}e\d{2}|season\s*\d+|episode\s*\d+|\d{1,2}x\d{1,2}/i) ||
-        folderPath.includes('tv') || folderPath.includes('series') || folderPath.includes('shows')) {
+    // TV Show patterns - expanded
+    if (fileName.match(/s\d{1,2}e\d{1,2}|season\s*\d+|episode\s*\d+|\d{1,2}x\d{1,2}/i) ||
+        folderPath.includes('tv') || folderPath.includes('series') || folderPath.includes('shows') ||
+        fileName.match(/\b(ep|episode)\s*\d+\b/i) ||
+        fileName.match(/\bseason\s*\d+\s*episode\s*\d+\b/i) ||
+        fileName.match(/\b(s\d+)\s*(e\d+)\b/i)) {
       return 'tv-show';
     }
     
-    // Movie patterns (years, movie folders, etc.)
+    // Documentary patterns
+    if (fileName.includes('documentary') || fileName.includes('docu') ||
+        folderPath.includes('documentary') || folderPath.includes('docs') ||
+        fileName.match(/\b(national.geographic|discovery|history.channel|bbc.documentary)\b/i)) {
+      return 'documentary';
+    }
+    
+    // Short film patterns
+    if (fileName.includes('short') || fileName.includes('shorts') ||
+        folderPath.includes('short') || folderPath.includes('shorts') ||
+        fileName.match(/\b(short.film|short.movie)\b/i)) {
+      return 'short';
+    }
+    
+    // Music video patterns
+    if (fileName.includes('music.video') || fileName.includes('mv') ||
+        folderPath.includes('music') || folderPath.includes('videos') ||
+        fileName.match(/\b(music|video|mv)\b.*\b(video|music|mv)\b/i) ||
+        fileName.match(/\b(official.video|official.music.video)\b/i)) {
+      return 'music-video';
+    }
+    
+    // Movie patterns (years, movie folders, etc.) - expanded
     if (fileName.match(/\b(19|20)\d{2}\b/) || 
-        folderPath.includes('movie') || folderPath.includes('film')) {
+        folderPath.includes('movie') || folderPath.includes('film') ||
+        folderPath.includes('movies') || folderPath.includes('films') ||
+        fileName.match(/\b(feature.film|motion.picture)\b/i) ||
+        fileName.match(/\b(dvd|bluray|blu.ray)\b/i)) {
       return 'movie';
     }
     
@@ -1373,6 +1505,8 @@ function App() {
     if (contentType === 'tv-show') {
       const sMatch = fileName.match(/s(\d{1,2})e(\d{1,2})/i);
       const xMatch = fileName.match(/(\d{1,2})x(\d{1,2})/);
+      const epMatch = fileName.match(/\b(ep|episode)\s*(\d+)\b/i);
+      const seasonEpMatch = fileName.match(/\bseason\s*(\d+)\s*episode\s*(\d+)\b/i);
       
       if (sMatch) {
         season = parseInt(sMatch[1]);
@@ -1382,18 +1516,29 @@ function App() {
         season = parseInt(xMatch[1]);
         episode = parseInt(xMatch[2]);
         title = fileName.replace(/\d{1,2}x\d{1,2}.*/i, '').trim();
+      } else if (seasonEpMatch) {
+        season = parseInt(seasonEpMatch[1]);
+        episode = parseInt(seasonEpMatch[2]);
+        title = fileName.replace(/\bseason\s*\d+\s*episode\s*\d+.*/i, '').trim();
+      } else if (epMatch) {
+        episode = parseInt(epMatch[2]);
+        title = fileName.replace(/\b(ep|episode)\s*\d+.*/i, '').trim();
       }
     }
     
-    // Extract year
+    // Extract year for movies and other content
     const yearMatch = fileName.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
       year = parseInt(yearMatch[0]);
       title = title.replace(yearMatch[0], '').trim();
     }
     
-    // Clean up title
-    title = title.replace(/[[\]()]/g, '').replace(/\s+/g, ' ').trim();
+    // Clean up title - remove common separators and extra spaces
+    title = title.replace(/[[\]()\-_.]/g, ' ').replace(/\s+/g, ' ').trim();
+    // Remove common video file suffixes
+    title = title.replace(/\b(1080p|720p|4k|hd|bluray|dvd|web|rip|h264|h265|x264|x265)\b/gi, '').trim();
+    // Remove multiple spaces again
+    title = title.replace(/\s+/g, ' ').trim();
     
     return { title, season, episode, year, contentType };
   }, []);
@@ -1479,7 +1624,25 @@ function App() {
           }
           
           console.log('Total videos from all folders:', allVideos.length);
-          setVideos(allVideos);
+          
+          // Apply saved favorites and content types
+          const videosWithSavedData = allVideos.map(video => {
+            // Apply saved favorite status
+            const savedFavorite = loadedSettings.favorites?.find((fav: any) => fav.path === video.path);
+            const isFavorite = savedFavorite ? true : (video.isFavorite ?? false);
+            
+            // Apply saved content type
+            const savedContentType = loadedSettings.contentTypes?.find((ct: any) => ct.path === video.path);
+            const contentType = savedContentType ? savedContentType.contentType : video.contentType;
+            
+            return {
+              ...video,
+              isFavorite,
+              contentType
+            };
+          });
+          
+          setVideos(videosWithSavedData);
         };
         
         // Auto-scan startup folders if enabled
@@ -1500,7 +1663,7 @@ function App() {
     loadSettings();
   }, [extractVideoMetadata]);
 
-  const saveSettings = async (newSettings: any) => {
+  const saveSettings = React.useCallback(async (newSettings: any) => {
     try {
       const success = await ipcRenderer.invoke('save-settings', newSettings);
       if (success) {
@@ -1512,7 +1675,7 @@ function App() {
     } catch (error) {
       console.error('Error saving settings:', error);
     }
-  };
+  }, []);
 
   const handleOnboardingComplete = async (profile: UserProfile) => {
     setUserProfile(profile);
@@ -1523,13 +1686,31 @@ function App() {
     await saveSettings(updatedSettings);
   };
 
-  const playVideo = React.useCallback((path: string) => {
-    if (selectedVideo !== path) {
-      // Trigger animation for new video
-      setVideoKey(prev => prev + 1);
-    }
-    setSelectedVideo(path);
-  }, [selectedVideo]);
+  const updateVideoContentType = React.useCallback((path: string, newContentType: 'movie' | 'tv-show' | 'documentary' | 'short' | 'music-video' | 'home-media') => {
+    setVideos(prevVideos => 
+      prevVideos.map(video => 
+        video.path === path 
+          ? { ...video, contentType: newContentType } 
+          : video
+      )
+    );
+    
+    // Save content types to settings
+    const contentTypes = videos
+      .filter(video => video.path === path || video.contentType !== 'home-media')
+      .map(video => ({
+        path: video.path,
+        contentType: video.path === path ? newContentType : video.contentType
+      }));
+    
+    const updatedSettings = { ...settings, contentTypes };
+    saveSettings(updatedSettings);
+  }, [videos, settings, saveSettings]);
+
+  // Function to play a video by setting it as selected
+  const playVideo = React.useCallback((filePath: string) => {
+    setSelectedVideo(filePath);
+  }, []);
 
   // Handle file opening from Windows file associations
   React.useEffect(() => {
@@ -1561,7 +1742,7 @@ function App() {
   const selectDirectory = async () => {
     try {
       setIsLoading(true);
-      const dir = await ipcRenderer.invoke('select-directory');
+      const dir = await window.api.selectDirectory();
       if (dir) {
         console.log('Selected directory:', dir);
         const vids = await ipcRenderer.invoke('scan-videos', dir);
@@ -1586,7 +1767,25 @@ function App() {
           };
         });
         console.log('Normalized videos:', normalized.length, normalized[0]);
-        setVideos(normalized);
+        
+        // Apply saved favorites and content types
+        const videosWithSavedData = normalized.map(video => {
+          // Apply saved favorite status
+          const savedFavorite = settings.favorites?.find((fav: any) => fav.path === video.path);
+          const isFavorite = savedFavorite ? true : (video.isFavorite ?? false);
+          
+          // Apply saved content type
+          const savedContentType = settings.contentTypes?.find((ct: any) => ct.path === video.path);
+          const contentType = savedContentType ? savedContentType.contentType : video.contentType;
+          
+          return {
+            ...video,
+            isFavorite,
+            contentType
+          };
+        });
+        
+        setVideos(videosWithSavedData);
       }
     } catch (error) {
       console.error('Error selecting directory:', error);
@@ -1918,7 +2117,7 @@ function App() {
                   <button className="window-btn close-btn" onClick={closeWindow}>×</button>
                 </div>
               </header>
-          <div className={`main-content ${selectedVideo ? 'with-video' : 'no-video'}`}>
+          <main className={`main-content ${selectedVideo ? 'with-video' : 'no-video'}`}>
             {selectedVideo ? (
               <Player
                 selectedVideo={selectedVideo}
@@ -1939,7 +2138,7 @@ function App() {
                 userProfile={userProfile}
                 onBack={() => setCurrentPage('home')}
               />
-            ) : settings.streamingMode ? (
+            ) : settings.theaterMode ? (
               <StreamingInterface 
                 videos={getPageFilteredVideos(currentPage)}
                 userProfile={userProfile}
@@ -1966,11 +2165,14 @@ function App() {
                 onShowInExplorer={showInExplorer}
                 onDeleteVideo={deleteVideo}
                 setVideos={setVideos}
+                onUpdateContentType={updateVideoContentType}
                 cardSize={settings.cardSize || 'medium'}
                 currentPage={currentPage}
+                saveSettings={saveSettings}
+                settings={settings}
               />
             )}
-          </div>
+          </main>
 
           {/* Settings Panel */}
           {showSettings && (
